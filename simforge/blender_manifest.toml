@@ -1,0 +1,14 @@
+schema_version = "1.0.0"
+id = "simforge"
+version = "0.1.0"
+name = "SimForge"
+tagline = "Retopology, PBR baking and simulation-ready USD scaffold"
+maintainer = "SimForge Contributors"
+type = "add-on"
+blender_version_min = "4.2.0"
+blender_version_max = "6.0.0"
+license = ["SPDX:MIT"]
+tags = ["Object", "Import-Export"]
+
+[permissions]
+files = "Save textures and USD assets to user-selected folders"
