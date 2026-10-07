@@ -43,7 +43,7 @@ def usd_export_kwargs(filepath):
         "export_materials": True, "export_uvmaps": True,
         "export_normals": True, "relative_paths": True,
     }
-    # Blender 5.0 removed export_textures in favor of export_textures_mode.
+    # Blender 5.x uses export_textures_mode instead of export_textures.
     if "export_textures_mode" in properties:
         required["export_textures_mode"] = "NEW"
     elif "export_textures" in properties:

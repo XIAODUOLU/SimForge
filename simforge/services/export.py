@@ -1,10 +1,36 @@
 """Service entry point for exporting self-contained, reusable Isaac Sim USD assets."""
+from __future__ import annotations
+
+from typing import TYPE_CHECKING
+
 from ..core.contracts import ExportOptions, ExportResult
 from ..core.errors import FeatureNotImplemented
 
+if TYPE_CHECKING:
+    from bpy.types import Context, Object
 
-def export(context, low_poly, options: ExportOptions) -> ExportResult:
+
+def export(context: Context, low_poly: Object, options: ExportOptions) -> ExportResult:
     """Write USD, relative texture paths and standard physics/collision attributes.
+
+    Args:
+        context (bpy.types.Context): Blender execution context, normally bpy.context
+            or the Operator's context. Supplies the scene, view layer and selection.
+            Call in Object Mode on Blender's main thread.
+        low_poly (bpy.types.Object): Nonempty MESH object in the current view layer
+            with usable active UVs and valid materials/textures. May come from
+            Retopo/Bake or be an existing prepared mesh; validate its actual data.
+        options (ExportOptions): Immutable settings snapshot. filepath is the
+            absolute destination USD file path; physics contains PhysicsOptions;
+            meters_per_blender_unit converts Blender scene lengths to meters.
+            See core.contracts.ExportOptions and PhysicsOptions for field details.
+
+    Returns:
+        ExportResult: Return ExportResult(filepath=options.filepath) after the
+            final .usd/.usda/.usdc file and its resources have been saved and
+            validated. filepath is a pathlib.Path, not a USD stage or bpy object.
+            The asset must use Z-up, metersPerUnit=1, a stable defaultPrim,
+            relative texture references and authored physics/collision schemas.
 
     1. Validate target materials and external textures; copy resources to the output.
     2. Build version-compatible arguments with adapters.blender.usd_export_kwargs.

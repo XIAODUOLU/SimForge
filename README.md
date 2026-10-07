@@ -26,7 +26,7 @@ The workflow preserves the original high-poly mesh as the baking source. Export 
 
 ## Requirements
 
-- **Blender 4.x–5.x** is the compatibility target. Registration and interface tests currently pass in **Blender 4.2.3 LTS**; other versions still require runtime validation.
+- **Blender 4.x–5.x** is the compatibility target. Registration and interface smoke tests and Extension manifest validation pass in the available **Blender 4.x** environment. Blender 5.x runtime validation and processing-service validation are pending; this does not establish coverage of every release in either range.
 - **Python 3.10 or later** is needed to build installation packages from source using the provided script. The add-on itself runs inside Blender's Python environment.
 - USD/PhysX Python bindings are optional at registration time. The export implementation will require suitable bindings for physics authoring or a separately implemented Isaac Sim post-processing step.
 
@@ -58,7 +58,7 @@ The intended processing order is **Retopo → Bake → Export**. Processing is n
 
 - [Development guide](docs/development.md): implement the three services, use adapters, build packages, and run checks.
 - [Architecture](docs/architecture.md): module responsibilities, data contracts, processing requirements, and resource cleanup.
-- [Compatibility](docs/compatibility.md): supported targets, tested versions, dependency handling, and validation procedures.
+- [Compatibility](docs/compatibility.md): supported ranges, validation scope, dependency handling, and validation procedures.
 
 ## Roadmap
 
