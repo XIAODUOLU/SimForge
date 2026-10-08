@@ -2,13 +2,12 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from traceback import format_exc
 
 from ..core.contracts import RetopoOptions, RetopoResult
 from ..core.errors import SimForgeError
 
-if TYPE_CHECKING:
-    from bpy.types import Context, Object, Mesh
+from bpy.types import Context, Object, Mesh, ViewLayer, Scene
 
 import bpy
 
@@ -52,14 +51,32 @@ def retopo(context: Context, high_poly: Object, options: RetopoOptions) -> Retop
             bpy.ops.object.mode_set(mode="OBJECT")
         bpy.ops.object.select_all(action="DESELECT")
 
-        context.active_object = high_poly
+        if not (
+            isinstance(context.view_layer, ViewLayer)
+            and isinstance(context.scene, Scene)
+        ):
+            raise SimForgeError("Retopo Error: context error")
+
+        if high_poly.name not in context.view_layer.objects:
+            context.scene.collection.objects.link(high_poly)
+        context.view_layer.objects.active = high_poly
+
         # Ensure modifiers applied
         bpy.ops.object.convert(target="MESH")
-        bpy.ops.object.duplicate()
 
         # active_object changed by duplicate action
-        low_poly = context.active_object
-        low_poly.name = high_poly.name + "_low_poly"
+        if not context.active_object or not context.active_object.data:
+            raise SimForgeError("Retopo Error: high ploy mesh error")
+
+        low_poly = context.active_object.copy()
+        low_poly.name = context.active_object.name + "LowPoly"
+        low_poly.data = context.active_object.data.copy()
+        low_poly.data.name = context.active_object.data.name + "LowPoly"
+
+        context.collection.objects.link(low_poly)
+        bpy.ops.object.select_all(action="DESELECT")
+        low_poly.select_set(True)
+        bpy.context.view_layer.objects.active = low_poly
 
         if isinstance(low_poly.data, Mesh):
             low_poly.data.remesh_mode = "VOXEL"
@@ -104,4 +121,5 @@ def retopo(context: Context, high_poly: Object, options: RetopoOptions) -> Retop
         return RetopoResult(low_poly)
 
     except Exception as e:
+        print(format_exc())
         raise SimForgeError("Retopo Error") from e

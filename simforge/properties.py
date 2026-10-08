@@ -3,6 +3,13 @@ import bpy
 from bpy.props import EnumProperty, FloatProperty, IntProperty, PointerProperty, StringProperty
 
 
+# Newer Blender versions require explicit support for // paths; older ones
+# support them implicitly and do not recognize the new option.
+_PATH_OPTIONS = {'ANIMATABLE'}
+if "is_path_supports_blend_relative" in bpy.types.Property.bl_rna.properties:
+    _PATH_OPTIONS.add('PATH_SUPPORTS_BLEND_RELATIVE')
+
+
 def mesh_object(_self, obj):
     return obj.type == 'MESH'
 
@@ -18,12 +25,12 @@ class SIMFORGE_PG_settings(bpy.types.PropertyGroup):
     resolution: EnumProperty(name="Texture Size", items=[
         (str(size), str(size), "") for size in (512, 1024, 2048, 4096, 8192)
     ], default='2048')
-    margin_pixels: IntProperty(name="Bake Margin (px)", default=16, min=0, max=256)
     cage_extrusion: FloatProperty(name="Cage Extrusion", default=0.01, min=0.0,
                                   subtype='DISTANCE')
     texture_directory: StringProperty(name="Texture Directory", subtype='DIR_PATH',
-                                      default="//simforge_textures/")
-    export_path: StringProperty(name="USD File", subtype='FILE_PATH', default="//asset.usdc")
+                                      default="//simforge_textures/", options=_PATH_OPTIONS)
+    export_path: StringProperty(name="USD File", subtype='FILE_PATH',
+                               default="//asset.usdc", options=_PATH_OPTIONS)
     body_type: EnumProperty(name="Body Type", items=[
         ('DYNAMIC', "Dynamic", "A dynamic rigid body"), ('STATIC', "Static", "A static collider")
     ], default='DYNAMIC')

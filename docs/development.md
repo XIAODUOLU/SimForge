@@ -42,9 +42,8 @@ Workflow checks that a UV layer exists, not that it is properly unwrapped or pac
 | `RetopoOptions.smart_uv_angle` | Radians |
 | `RetopoOptions.uv_margin` | UV-space spacing; explicitly choose and validate Pack Islands margin semantics |
 | `BakeOptions.resolution` | Texture dimension in pixels |
-| `BakeOptions.margin_pixels` | Bake padding in pixels |
 | `BakeOptions.cage_extrusion` | Blender scene length units |
-| `BakeOptions.channels` | Requested channels; defaults to all five, but direct callers may request a subset |
+| `BakeOptions.channels` | Requested channels |
 | `ExportOptions.meters_per_blender_unit` | Scale used to convert scene coordinates to meters |
 | `ExportOptions.physics` | Body type, mass in kilograms, collision approximation, friction, and restitution |
 

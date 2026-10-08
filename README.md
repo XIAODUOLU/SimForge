@@ -65,8 +65,8 @@ The intended processing order is **Retopo → Bake → Export**. Processing is n
 - [x] Add-on registration, settings, and sidebar
 - [x] Service contracts, validation, and basic version adapters
 - [x] Legacy and Extension packaging
-- [ ] Retopology with mesh validation and UV generation
-- [ ] Five-channel PBR baking
+- [x] Retopology with mesh validation and UV generation
+- [x] PBR baking
 - [ ] USD export with physics and collision authoring
 - [ ] Runtime coverage across Blender 4.x and 5.x
 - [ ] Asset validation in Isaac Sim

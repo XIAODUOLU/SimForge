@@ -18,7 +18,7 @@ simforge/
 │   └── errors.py           User, compatibility and unimplemented-feature errors
 ├── services/
 │   ├── retopo.py           New target mesh + Smart UV + Pack Islands
-│   ├── bake.py             Five-channel baking, saving and material connections
+│   ├── bake.py             PBR baking, saving and material connections
 │   └── export.py           USD output with physics and collision schemas
 └── adapters/
     ├── blender.py          RNA detection, USD arguments and material input access
@@ -68,7 +68,7 @@ Smart UV uses radians. Specify Pack Islands margin semantics explicitly in the a
 
 Handle constant values when source materials have no textures, and cover all material slots. Complex node graphs may not reduce to one Principled BSDF. Define the supported graph scope and report unsupported graphs explicitly. Do not assume `METALLIC` or `ALPHA` bake types exist.
 
-The service creates output directories, manages the active Image Texture for every material slot, saves five maps and connects the target material. Restore engine changes, temporary materials, ray settings and visibility using `try/finally`. An explicit cage must satisfy target topology constraints; do not use a double-layer Solidify mesh directly as a cage.
+The service creates output directories, manages the active Image Texture for every material slot, saves pbr maps and connects the target material. Restore engine changes, temporary materials, ray settings and visibility using `try/finally`. An explicit cage must satisfy target topology constraints; do not use a double-layer Solidify mesh directly as a cage.
 
 ## USD and Isaac Sim contract
 

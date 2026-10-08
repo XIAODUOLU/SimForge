@@ -1,18 +1,26 @@
 """Service entry point for projecting PBR detail from the original high-poly source."""
+
 from __future__ import annotations
+from traceback import format_exc
 
 from pathlib import Path
-from typing import TYPE_CHECKING
 
-from ..core.contracts import BakeOptions, BakeResult
-from ..core.errors import FeatureNotImplemented
+from ..core.contracts import BakeOptions, BakeResult, BakeChannel
+from ..core.errors import SimForgeError
 
-if TYPE_CHECKING:
-    from bpy.types import Context, Object
+from bpy.types import Context, Object, ShaderNodeTexImage, Mesh, Scene, ViewLayer
+
+import bpy
+import os
 
 
-def bake(context: Context, high_poly: Object, low_poly: Object, options: BakeOptions,
-         output_directory: Path) -> BakeResult:
+def bake(
+    context: Context,
+    high_poly: Object,
+    low_poly: Object,
+    options: BakeOptions,
+    output_directory: Path,
+) -> BakeResult:
     """Bake requested channels, connect target textures and return saved files.
 
     Args:
@@ -25,9 +33,9 @@ def bake(context: Context, high_poly: Object, low_poly: Object, options: BakeOpt
         low_poly (bpy.types.Object): Nonempty MESH target in the current view layer
             with usable active UVs. Must be a different object with different mesh
             data from high_poly. Its materials receive the baked textures.
-        options (BakeOptions): Immutable settings snapshot. resolution and
-            margin_pixels are pixels; cage_extrusion is in scene length units;
-            channels is a tuple of BakeChannel members, defaulting to all five.
+        options (BakeOptions): Immutable settings snapshot. resolution
+            is pixels; cage_extrusion is in scene length units;
+            channels is a tuple of BakeChannel members, defaulting to pbr textures.
             See core.contracts.BakeOptions for types and defaults.
         output_directory (pathlib.Path): Absolute texture output directory,
             resolved by workflow before this call. Create it if needed. This is
@@ -55,4 +63,115 @@ def bake(context: Context, high_poly: Object, low_poly: Object, options: BakeOpt
     mesh cannot be used directly as a cage. The implementation owns naming,
     overwrite policy and failure cleanup; never silently overwrite existing files.
     """
-    raise FeatureNotImplemented("Implement bake() in services/bake.py.")
+
+    try:
+        # Ensure the mode is OBJECT
+        if bpy.context.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+
+        if not (
+            isinstance(context.view_layer, ViewLayer)
+            and isinstance(context.scene, Scene)
+        ):
+            raise SimForgeError("Bake Error: context error")
+
+        if high_poly.name not in context.view_layer.objects:
+            context.scene.collection.objects.link(high_poly)
+        if low_poly.name not in context.view_layer.objects:
+            context.scene.collection.objects.link(low_poly)
+
+        if not isinstance(low_poly.data, Mesh):
+            raise SimForgeError("Bake Error: LowPoly is not a Mesh")
+
+        # Define new material
+        mat = bpy.data.materials.new(name=low_poly.name + "Material")
+        mat.use_nodes = True
+
+        if not mat.node_tree:
+            raise SimForgeError("Bake Error: material does not have node_tree")
+
+        # Get nodes and links
+        nodes = mat.node_tree.nodes
+        links = mat.node_tree.links
+
+        # Clear the default nodes
+        nodes.clear()
+
+        # Add new nodes and images
+        output = nodes.new(type="ShaderNodeOutputMaterial")
+        bsdf = nodes.new(type="ShaderNodeBsdfPrincipled")
+        diffuse = nodes.new(type="ShaderNodeTexImage")
+        diffuse_image = bpy.data.images.new(
+            low_poly.name + "Diffuse",
+            width=options.resolution,
+            height=options.resolution,
+            alpha=True,
+        )
+
+        # Setup links
+        links.new(diffuse.outputs["Color"], bsdf.inputs["Base Color"])
+        links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
+
+        if not isinstance(diffuse, ShaderNodeTexImage):
+            raise SimForgeError("Bake Error: diffuse node is not ShaderNodeTexImage")
+
+        diffuse.image = diffuse_image
+
+        if low_poly.data.materials:
+            low_poly.data.materials.clear()
+        else:
+            low_poly.data.materials.append(mat)
+
+        # Set select objects
+        bpy.ops.object.select_all(action="DESELECT")
+
+        low_poly.select_set(True)
+        high_poly.select_set(True)
+
+        context.view_layer.objects.active = low_poly
+
+        for node in nodes:
+            node.select = False
+        diffuse.select = True
+        nodes.active = diffuse
+
+        # Bake options
+        if not isinstance(context.scene, Scene):
+            raise SimForgeError("Bake Error: scene does not exist")
+
+        context.scene.render.engine = "CYCLES"
+        context.scene.cycles.device = "GPU"
+
+        context.scene.render.bake.use_pass_color = True
+        context.scene.render.bake.use_pass_direct = False
+        context.scene.render.bake.use_pass_indirect = False
+
+        context.scene.render.bake.use_selected_to_active = True
+        context.scene.render.bake.cage_extrusion = options.cage_extrusion
+        context.scene.render.bake.max_ray_distance = 0
+
+        context.scene.render.bake.target = "IMAGE_TEXTURES"
+
+        context.scene.render.bake.use_clear = True
+        context.scene.render.bake.margin_type = "ADJACENT_FACES"
+        context.scene.render.bake.margin = 16
+
+        bpy.ops.object.bake(type="DIFFUSE")
+
+        # Save Diffuse Image
+        diffuse_image.filepath_raw = bpy.path.abspath(
+            os.path.join(output_directory, diffuse_image.name)
+        )
+        diffuse_image.file_format = "PNG"
+        diffuse_image.save()
+
+        return BakeResult(
+            {
+                BakeChannel.BASE_COLOR: Path(diffuse_image.filepath_raw),
+                BakeChannel.NORMAL: Path(),
+            }
+        )
+
+    except Exception as e:
+        print(format_exc())
+        raise SimForgeError("Bake Error") from e

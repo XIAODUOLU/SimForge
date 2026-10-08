@@ -12,10 +12,7 @@ if TYPE_CHECKING:
 
 class BakeChannel(str, Enum):
     NORMAL = "normal"
-    BASE_COLOR = "base_color"  # Diffuse color only, excluding lighting and shadows.
-    METALLIC = "metallic"
-    ROUGHNESS = "roughness"
-    ALPHA = "alpha"
+    BASE_COLOR = "base_color"  # Diffuse color
 
 
 @dataclass(frozen=True)
@@ -45,19 +42,15 @@ class BakeOptions:
     Attributes:
         resolution (int): Width and height of each square texture in pixels
             (default 2048, meaning 2048 x 2048).
-        margin_pixels (int): Padding around baked UV islands in pixels (default 16).
         cage_extrusion (float): Baking projection cage extrusion distance in
             Blender scene length units (default 0.01), not automatically meters.
-        channels (tuple[BakeChannel, ...]): Channels to bake; defaults to all five:
-            NORMAL (tangent-space normals), BASE_COLOR (color without lighting),
-            METALLIC (metalness), ROUGHNESS (roughness), ALPHA (opacity).
+        channels (tuple[BakeChannel, ...]): Channels to bake; defaults to all pbr textures:
+            NORMAL (tangent-space normals), BASE_COLOR (color without lighting).
             Direct callers may request a subset. Use enum members, not raw strings.
     """
 
     resolution: int = 2048
-    margin_pixels: int = 16
     cage_extrusion: float = 0.01  # Blender scene length units.
-    channels: tuple[BakeChannel, ...] = tuple(BakeChannel)
 
 
 @dataclass(frozen=True)

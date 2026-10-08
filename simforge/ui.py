@@ -26,8 +26,7 @@ class SIMFORGE_PT_main(bpy.types.Panel):
 
         box = layout.box()
         box.label(text="2. PBR Baking")
-        box.label(text="Normal / Base Color / Metallic / Roughness / Alpha")
-        for name in ("resolution", "margin_pixels", "cage_extrusion", "texture_directory"):
+        for name in ("resolution", "cage_extrusion", "texture_directory"):
             box.prop(settings, name)
         box.operator("simforge.bake")
 

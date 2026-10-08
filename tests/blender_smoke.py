@@ -10,7 +10,7 @@ import simforge
 from simforge import workflow
 from simforge.adapters import blender as compatibility
 from simforge.adapters.blender import checked_kwargs, usd_export_kwargs
-from simforge.core.contracts import BakeChannel, BakeResult, ExportResult, RetopoResult
+from simforge.core.contracts import BakeResult, ExportResult, RetopoResult
 from simforge.core.errors import CompatibilityError, SimForgeError
 from simforge.services import bake, export, retopo
 
