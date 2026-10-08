@@ -1,13 +1,16 @@
 """Service entry point for generating a low-poly mesh from a high-poly source."""
+
 from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
 from ..core.contracts import RetopoOptions, RetopoResult
-from ..core.errors import FeatureNotImplemented
+from ..core.errors import SimForgeError
 
 if TYPE_CHECKING:
-    from bpy.types import Context, Object
+    from bpy.types import Context, Object, Mesh
+
+import bpy
 
 
 def retopo(context: Context, high_poly: Object, options: RetopoOptions) -> RetopoResult:
@@ -42,4 +45,60 @@ def retopo(context: Context, high_poly: Object, options: RetopoOptions) -> Retop
     Use adapters.context.preserve_selection to restore selection state.
     Make Manifold is an optional third-party capability, not a registration dependency.
     """
-    raise FeatureNotImplemented("Implement retopo() in services/retopo.py.")
+
+    try:
+        # Ensure the mode is OBJECT
+        if bpy.context.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+        bpy.ops.object.select_all(action="DESELECT")
+
+        context.active_object = high_poly
+        # Ensure modifiers applied
+        bpy.ops.object.convert(target="MESH")
+        bpy.ops.object.duplicate()
+
+        # active_object changed by duplicate action
+        low_poly = context.active_object
+        low_poly.name = high_poly.name + "_low_poly"
+
+        if isinstance(low_poly.data, Mesh):
+            low_poly.data.remesh_mode = "VOXEL"
+            low_poly.data.remesh_voxel_size = 0.005
+            low_poly.data.remesh_voxel_adaptivity = 0
+            low_poly.data.use_remesh_fix_poles = True
+            low_poly.data.use_remesh_preserve_volume = True
+            low_poly.data.use_remesh_preserve_attributes = True
+        bpy.ops.object.voxel_remesh()
+
+        if isinstance(low_poly.data, Mesh):
+            low_poly.data.remesh_mode = "QUAD"
+        bpy.ops.object.quadriflow_remesh(
+            use_mesh_symmetry=True,
+            use_preserve_sharp=False,
+            use_preserve_boundary=False,
+            preserve_attributes=False,
+            smooth_normals=True,
+            mode="FACES",
+            target_faces=10000,
+            seed=42,
+        )
+
+        # Ensure the mode is Edit
+        if bpy.context.mode != "EDIT":
+            bpy.ops.object.mode_set(mode="EDIT")
+        bpy.ops.mesh.select_mode(type="FACE")
+        bpy.ops.mesh.select_all(action="SELECT")
+        bpy.ops.uv.smart_project(scale_to_bounds=True)
+        bpy.ops.uv.pack_islands()
+
+        # Ensure the mode is OBJECT
+        if bpy.context.mode != "OBJECT":
+            bpy.ops.object.mode_set(mode="OBJECT")
+
+        if isinstance(low_poly.data, Mesh):
+            low_poly.data.materials.clear()
+
+        return RetopoResult(low_poly)
+
+    except Exception as e:
+        raise SimForgeError("Retopo Error") from e
