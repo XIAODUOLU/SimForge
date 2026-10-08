@@ -25,18 +25,17 @@ class RetopoOptions:
     Attributes:
         target_faces (int): Requested output face count (default 8000); QuadriFlow
             does not guarantee this exact count.
-        voxel_ratio (float): Voxel size divided by the longest bounding-box edge
-            (default 0.005). Use consistent coordinates; this is not a length.
+        voxel_size (float): Voxel size (default 0.005). Use consistent coordinates.
         smart_uv_angle (float): Smart UV Project angle limit in radians
             (default 1.1519173063, approximately 66 degrees).
         uv_margin (float): UV-space spacing between packed islands (default 0.02).
             The implementation must explicitly define the packing margin semantics.
     """
 
-    target_faces: int = 8000
-    voxel_ratio: float = 0.005  # Fraction of the longest bounding-box edge, not a world-space length.
+    target_faces: int = 10000
+    voxel_size: float = 0.005  # Size of the longest bounding-box edge.
     smart_uv_angle: float = 1.1519173063  # Radians, approximately 66 degrees.
-    uv_margin: float = 0.02  # UV-space spacing; the adapter must define its precise semantics.
+    uv_margin: float = 0.001  # UV-space spacing; the adapter must define its precise semantics.
 
 
 @dataclass(frozen=True)

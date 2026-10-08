@@ -34,7 +34,7 @@ def run_retopo(context):
     high = settings.high_poly if settings.high_poly is not None else context.active_object
     require_mesh(context, high, "High-poly object")
     result = retopo.retopo(context, high, RetopoOptions(
-        settings.target_faces, settings.voxel_ratio,
+        settings.target_faces, settings.voxel_size,
         settings.smart_uv_angle, settings.uv_margin,
     ))
     require_mesh(context, result.low_poly, "Returned low-poly object", uv=True)

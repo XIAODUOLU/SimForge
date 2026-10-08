@@ -38,7 +38,7 @@ Workflow checks that a UV layer exists, not that it is properly unwrapped or pac
 | Option | Meaning |
 | --- | --- |
 | `RetopoOptions.target_faces` | Requested face count, not an exact-count guarantee |
-| `RetopoOptions.voxel_ratio` | Fraction of the longest bounding-box edge; use a consistent coordinate space |
+| `RetopoOptions.voxel_size` | Size of the voxel; use a consistent coordinate space |
 | `RetopoOptions.smart_uv_angle` | Radians |
 | `RetopoOptions.uv_margin` | UV-space spacing; explicitly choose and validate Pack Islands margin semantics |
 | `BakeOptions.resolution` | Texture dimension in pixels |

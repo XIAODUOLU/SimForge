@@ -20,7 +20,7 @@ class SIMFORGE_PT_main(bpy.types.Panel):
 
         box = layout.box()
         box.label(text="1. Retopology & UV")
-        for name in ("target_faces", "voxel_ratio", "smart_uv_angle", "uv_margin"):
+        for name in ("target_faces", "voxel_size", "smart_uv_angle", "uv_margin"):
             box.prop(settings, name)
         box.operator("simforge.retopo")
 

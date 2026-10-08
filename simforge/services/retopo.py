@@ -24,7 +24,7 @@ def retopo(context: Context, high_poly: Object, options: RetopoOptions) -> Retop
             view layer. This is an object reference, not a Mesh datablock or file
             path. Preserve it and its mesh data as the later baking source.
         options (RetopoOptions): Immutable settings snapshot. target_faces is the
-            requested face count; voxel_ratio is relative to the longest bounds
+            requested face count; voxel_size is relative to the longest bounds
             edge; smart_uv_angle is in radians; uv_margin is UV-space spacing.
             See core.contracts.RetopoOptions for types and defaults.
 
@@ -36,7 +36,7 @@ def retopo(context: Context, high_poly: Object, options: RetopoOptions) -> Retop
 
     Implementation sequence, defined in docs/architecture.md:
     1. Copy the source object and mesh data; voxel-remesh the copy using its
-       bounding box and voxel_ratio.
+       bounding box and voxel_size.
     2. Validate manifold geometry; repair only if needed, then validate again.
     3. Run QuadriFlow with the requested face target; an exact count is not guaranteed.
     4. Run Smart UV Project and Pack Islands; return a new mesh with active UVs.
@@ -63,7 +63,7 @@ def retopo(context: Context, high_poly: Object, options: RetopoOptions) -> Retop
 
         if isinstance(low_poly.data, Mesh):
             low_poly.data.remesh_mode = "VOXEL"
-            low_poly.data.remesh_voxel_size = 0.005
+            low_poly.data.remesh_voxel_size = options.voxel_size
             low_poly.data.remesh_voxel_adaptivity = 0
             low_poly.data.use_remesh_fix_poles = True
             low_poly.data.use_remesh_preserve_volume = True
@@ -79,7 +79,7 @@ def retopo(context: Context, high_poly: Object, options: RetopoOptions) -> Retop
             preserve_attributes=False,
             smooth_normals=True,
             mode="FACES",
-            target_faces=10000,
+            target_faces=options.target_faces,
             seed=42,
         )
 
@@ -88,8 +88,11 @@ def retopo(context: Context, high_poly: Object, options: RetopoOptions) -> Retop
             bpy.ops.object.mode_set(mode="EDIT")
         bpy.ops.mesh.select_mode(type="FACE")
         bpy.ops.mesh.select_all(action="SELECT")
-        bpy.ops.uv.smart_project(scale_to_bounds=True)
-        bpy.ops.uv.pack_islands()
+        bpy.ops.uv.smart_project(
+            angle_limit=options.smart_uv_angle,
+            scale_to_bounds=True,
+        )
+        bpy.ops.uv.pack_islands(margin=options.uv_margin)
 
         # Ensure the mode is OBJECT
         if bpy.context.mode != "OBJECT":

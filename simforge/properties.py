@@ -10,11 +10,11 @@ def mesh_object(_self, obj):
 class SIMFORGE_PG_settings(bpy.types.PropertyGroup):
     high_poly: PointerProperty(name="High Poly", type=bpy.types.Object, poll=mesh_object)
     low_poly: PointerProperty(name="Low Poly", type=bpy.types.Object, poll=mesh_object)
-    target_faces: IntProperty(name="Target Faces", default=8000, min=100)
-    voxel_ratio: FloatProperty(name="Voxel / Bounds", default=0.005, min=0.0001, max=0.1)
+    target_faces: IntProperty(name="Target Faces", default=10000, min=100)
+    voxel_size: FloatProperty(name="Voxel Size", default=0.005, min=0.0001, max=1)
     smart_uv_angle: FloatProperty(name="Smart UV Angle", subtype='ANGLE',
                                   default=1.1519173063, min=0.01, max=1.5707963268)
-    uv_margin: FloatProperty(name="UV Margin", default=0.02, min=0.0, max=0.25)
+    uv_margin: FloatProperty(name="UV Margin", default=0.001, min=0.0, max=0.25)
     resolution: EnumProperty(name="Texture Size", items=[
         (str(size), str(size), "") for size in (512, 1024, 2048, 4096, 8192)
     ], default='2048')

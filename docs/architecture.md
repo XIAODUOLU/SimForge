@@ -50,7 +50,7 @@ Copy source → Voxel Remesh → Validate mesh
                                                        └─ Fail → Report error and stop
 ```
 
-Derive voxel size from the longest bounding-box edge and `voxel_ratio` (default 0.005). Repair is conditional: a mesh that passes validation does not need an additional repair operation. Stop before QuadriFlow if repair cannot satisfy the mesh checks. The target face count is a request, not a guarantee of an exact output count.
+Derive voxel size from the `voxel_size` (default 0.005). Repair is conditional: a mesh that passes validation does not need an additional repair operation. Stop before QuadriFlow if repair cannot satisfy the mesh checks. The target face count is a request, not a guarantee of an exact output count.
 
 Preserve the source object, Mesh, UVs, vertex colors and materials. Copy the Mesh data as well as the object to avoid changing the source. The high-poly reference must continue to point to the original textured source; do not substitute the voxelized intermediate as the baking source. Watertightness is a project quality gate. Validation should include degenerate faces and abnormal geometry, not just edge counts.
 
