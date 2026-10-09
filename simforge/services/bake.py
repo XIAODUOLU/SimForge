@@ -108,32 +108,35 @@ def bake(
             alpha=True,
         )
 
+        normal = nodes.new(type="ShaderNodeTexImage")
+        normal_image = bpy.data.images.new(
+            low_poly.name + "Normal",
+            width=options.resolution,
+            height=options.resolution,
+            alpha=True,
+        )
+        normal_image.colorspace_settings.name = "Linear CIE-XYZ D65"
+        normal_map = nodes.new(type="ShaderNodeNormalMap")
+
         # Setup links
         links.new(diffuse.outputs["Color"], bsdf.inputs["Base Color"])
         links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
+        links.new(diffuse.outputs["Color"], bsdf.inputs["Base Color"])
+        links.new(normal.outputs["Color"], normal_map.inputs["Color"])
+        links.new(normal_map.outputs["Normal"], bsdf.inputs["Normal"])
 
         if not isinstance(diffuse, ShaderNodeTexImage):
             raise SimForgeError("Bake Error: diffuse node is not ShaderNodeTexImage")
+        if not isinstance(normal, ShaderNodeTexImage):
+            raise SimForgeError("Bake Error: normal node is not ShaderNodeTexImage")
 
         diffuse.image = diffuse_image
+        normal.image = normal_image
 
         if low_poly.data.materials:
             low_poly.data.materials.clear()
         else:
             low_poly.data.materials.append(mat)
-
-        # Set select objects
-        bpy.ops.object.select_all(action="DESELECT")
-
-        low_poly.select_set(True)
-        high_poly.select_set(True)
-
-        context.view_layer.objects.active = low_poly
-
-        for node in nodes:
-            node.select = False
-        diffuse.select = True
-        nodes.active = diffuse
 
         # Bake options
         if not isinstance(context.scene, Scene):
@@ -156,6 +159,20 @@ def bake(
         context.scene.render.bake.margin_type = "ADJACENT_FACES"
         context.scene.render.bake.margin = 16
 
+        # Set select objects
+        bpy.ops.object.select_all(action="DESELECT")
+
+        low_poly.select_set(True)
+        high_poly.select_set(True)
+
+        context.view_layer.objects.active = low_poly
+
+        for node in nodes:
+            node.select = False
+        diffuse.select = True
+        nodes.active = diffuse
+
+        # Bake Diffuse Image
         bpy.ops.object.bake(type="DIFFUSE")
 
         # Save Diffuse Image
@@ -165,10 +182,33 @@ def bake(
         diffuse_image.file_format = "PNG"
         diffuse_image.save()
 
+        # Set select objects
+        bpy.ops.object.select_all(action="DESELECT")
+
+        low_poly.select_set(True)
+        high_poly.select_set(True)
+
+        context.view_layer.objects.active = low_poly
+
+        for node in nodes:
+            node.select = False
+        normal.select = True
+        nodes.active = normal
+
+        # Bake Normal Image
+        bpy.ops.object.bake(type="NORMAL")
+
+        # Save Normal Image
+        normal_image.filepath_raw = bpy.path.abspath(
+            os.path.join(output_directory, normal_image.name)
+        )
+        normal_image.file_format = "PNG"
+        normal_image.save()
+
         return BakeResult(
             {
                 BakeChannel.BASE_COLOR: Path(diffuse_image.filepath_raw),
-                BakeChannel.NORMAL: Path(),
+                BakeChannel.NORMAL: Path(normal_image.filepath_raw),
             }
         )
 
