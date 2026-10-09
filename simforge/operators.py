@@ -34,7 +34,7 @@ class OperationMixin:
 class SIMFORGE_OT_retopo(OperationMixin, bpy.types.Operator):
     bl_idname = "simforge.retopo"
     bl_label = "Retopo"
-    bl_description = "Create a low-poly mesh, then run Smart UV Project and Pack Islands (not implemented)"
+    bl_description = "Create a low-poly mesh, then run Smart UV Project and Pack Islands"
     bl_options = {'REGISTER', 'UNDO'}
     run = staticmethod(workflow.run_retopo)
 
@@ -42,7 +42,7 @@ class SIMFORGE_OT_retopo(OperationMixin, bpy.types.Operator):
 class SIMFORGE_OT_bake(OperationMixin, bpy.types.Operator):
     bl_idname = "simforge.bake"
     bl_label = "Bake"
-    bl_description = "Bake Normal, Base Color, Metallic, Roughness and Alpha (not implemented)"
+    bl_description = "Bake Normal and Base Color"
     bl_options = {'REGISTER', 'UNDO'}
     run = staticmethod(workflow.run_bake)
 
@@ -50,7 +50,7 @@ class SIMFORGE_OT_bake(OperationMixin, bpy.types.Operator):
 class SIMFORGE_OT_export(OperationMixin, bpy.types.Operator):
     bl_idname = "simforge.export"
     bl_label = "Export"
-    bl_description = "Export Isaac Sim USD with collision and physics attributes (not implemented)"
+    bl_description = "Export Isaac Sim USD with collision and physics attributes"
     # File writes cannot be undone; do not declare UNDO.
     bl_options = {'REGISTER'}
     run = staticmethod(workflow.run_export)

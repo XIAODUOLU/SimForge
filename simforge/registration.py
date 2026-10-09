@@ -2,6 +2,7 @@
 import bpy
 
 from .adapters.blender import ensure_supported_version
+from .adapters.dependencies import ensure_usd_dependencies
 from .operators import SIMFORGE_OT_bake, SIMFORGE_OT_export, SIMFORGE_OT_retopo
 from .properties import SIMFORGE_PG_settings
 from .ui import SIMFORGE_PT_main
@@ -18,6 +19,7 @@ def register():
     ensure_supported_version()
     if _registered_classes:
         return
+    ensure_usd_dependencies()
     try:
         for cls in CLASSES:
             bpy.utils.register_class(cls)

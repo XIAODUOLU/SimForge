@@ -10,7 +10,7 @@ import simforge
 from simforge import workflow
 from simforge.adapters import blender as compatibility
 from simforge.adapters.blender import checked_kwargs, usd_export_kwargs
-from simforge.core.contracts import BakeResult, ExportResult, RetopoResult
+from simforge.core.contracts import BakeChannel, BakeResult, ExportResult, RetopoResult
 from simforge.core.errors import CompatibilityError, SimForgeError
 from simforge.services import bake, export, retopo
 
@@ -27,9 +27,12 @@ simforge.register()
 simforge.register()  # Repeated registration must not create duplicate RNA classes.
 settings = bpy.context.scene.simforge
 high = bpy.context.active_object
-settings.high_poly = high
-assert bpy.ops.simforge.retopo() == {'CANCELLED'}
+settings.high_poly = None
+bpy.context.view_layer.objects.active = None
+expect_error(lambda: workflow.run_retopo(bpy.context), SimForgeError)
 assert settings.low_poly is None
+settings.high_poly = high
+bpy.context.view_layer.objects.active = high
 expect_error(lambda: workflow.resolve_path('//unsaved.usd'), SimForgeError)
 expect_error(lambda: checked_kwargs(bpy.ops.wm.usd_export, {'unknown_required': True}), CompatibilityError)
 assert usd_export_kwargs('/tmp/simforge_probe.usdc')['selected_objects_only']
@@ -41,7 +44,7 @@ if not low.data.uv_layers:
     low.data.uv_layers.new(name='UVMap')
 original_retopo, original_bake, original_export = retopo.retopo, bake.bake, export.export
 try:
-    # Use service doubles to verify contracts; this does not test unimplemented algorithms.
+    # Service doubles verify workflow contracts; real USD checks are in blender_export.py.
     retopo.retopo = lambda context, source, options: RetopoResult(low)
     assert bpy.ops.simforge.retopo() == {'FINISHED'}
     assert settings.low_poly == low and settings.high_poly == high
@@ -49,14 +52,17 @@ try:
         directory = Path(temporary)
         settings.texture_directory = str(directory)
         settings.export_path = str(directory / 'asset.usda')
-        assert bpy.ops.simforge.bake() == {'CANCELLED'}
-        assert bpy.ops.simforge.export() == {'CANCELLED'}
+        settings.low_poly = high
+        expect_error(lambda: workflow.run_bake(bpy.context), SimForgeError)
+        settings.low_poly = None
+        expect_error(lambda: workflow.run_export(bpy.context), SimForgeError)
+        settings.low_poly = low
         assert not list(directory.iterdir())
 
         def fake_bake(context, source, target, options, output):
             assert source == high and target == low
             textures = {}
-            for channel in options.channels:
+            for channel in (BakeChannel.BASE_COLOR, BakeChannel.NORMAL):
                 path = output / f'{channel.value}.png'
                 path.write_bytes(b'test contract only')
                 textures[channel] = path
@@ -71,7 +77,7 @@ try:
         assert bpy.ops.simforge.bake() == {'FINISHED'}
         assert bpy.ops.simforge.export() == {'FINISHED'}
         expect_error(lambda: workflow.run_export(bpy.context), SimForgeError)
-        bake.bake = lambda *args: BakeResult({})
+        bake.bake = lambda *args: BakeResult({BakeChannel.BASE_COLOR: directory / 'missing.png'})
         expect_error(lambda: workflow.run_bake(bpy.context), SimForgeError)
     settings.low_poly = high
     expect_error(lambda: workflow.run_bake(bpy.context), SimForgeError)

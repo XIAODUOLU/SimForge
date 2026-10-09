@@ -11,4 +11,5 @@ license = ["SPDX:MIT"]
 tags = ["Object", "Import-Export"]
 
 [permissions]
-files = "Save textures and USD assets to user-selected folders"
+files = "Save textures/USD assets and cache plugin dependencies"
+network = "Install missing USD dependencies with Blender Python pip"

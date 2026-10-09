@@ -12,7 +12,7 @@ High-poly asset → Retopology & UVs → PBR baking → USD with physics & colli
 
 **Early development · version 0.1.0**
 
-The add-on foundation is available: a Blender sidebar, persistent settings, input validation, version adapters, and installation packages. The three processing stages are currently implementation stubs. With valid inputs, their buttons report that implementation is required; this version does not yet generate simulation-ready assets.
+The add-on provides retopology, base-color/normal baking, and USD export with collision and rigid-body schemas. Export has been tested in Blender 4.x; validation inside Isaac Sim is still pending.
 
 ## Planned capabilities
 
@@ -26,9 +26,9 @@ The workflow preserves the original high-poly mesh as the baking source. Export 
 
 ## Requirements
 
-- **Blender 4.x–5.x** is the compatibility target. Registration and interface smoke tests and Extension manifest validation pass in the available **Blender 4.x** environment. Blender 5.x runtime validation and processing-service validation are pending; this does not establish coverage of every release in either range.
+- **Blender 4.x–5.x** is the compatibility target. Registration, USD export, pip dependency installation and Extension manifest validation pass in **Blender 4.x**. Blender 5.x runtime validation is pending; this does not establish coverage of every release in either range.
 - **Python 3.10 or later** is needed to build installation packages from source using the provided script. The add-on itself runs inside Blender's Python environment.
-- USD/PhysX Python bindings are optional at registration time. The export implementation will require suitable bindings for physics authoring or a separately implemented Isaac Sim post-processing step.
+- On first enable, SimForge uses existing USD Python bindings if available, otherwise installs `usd-core>=24.5,<27` through Blender's Python pip. The first installation requires network access. Dependencies are cached in Blender's user scripts directory under `simforge_dependencies`, independently of system Python. Installation packages contain no dependency wheels.
 
 See the [compatibility guide](docs/compatibility.md) for the validation scope and adapter boundaries.
 
@@ -52,7 +52,11 @@ python3 scripts/build.py
 3. Assign **High Poly**, or leave it empty to use the active object for Retopo.
 4. Configure the target face count, UV settings, texture output, and USD physics settings.
 
-The intended processing order is **Retopo → Bake → Export**. Processing is not available in the current scaffold. Default paths use Blender's `//` notation: save the `.blend` file first or choose absolute output paths.
+The processing order is **Retopo → Bake → Export**. Export also accepts an existing prepared mesh with an active UV map and valid materials. Default paths use Blender's `//` notation: save the `.blend` file first or choose absolute output paths.
+
+Export writes a reusable `/Asset` component with Z-up, meter coordinates, relative textures in `<asset_name>_textures/`, and a separate physics material binding that preserves the visual material. Move the USD and its texture directory together. Existing USD files and texture directories are never overwritten.
+
+Dynamic assets receive a rigid body and mass in kilograms; static assets receive collision only. The default parameters are 1 kg, convex hull collision, static/dynamic friction 0.5, and restitution 0. Adjust these to the object's measured properties; use convex decomposition for concave geometry. Isaac Sim computes collider decomposition, center of mass and inertia when loading. The asset does not create a global physics scene.
 
 ## Documentation
 
@@ -67,7 +71,7 @@ The intended processing order is **Retopo → Bake → Export**. Processing is n
 - [x] Legacy and Extension packaging
 - [x] Retopology with mesh validation and UV generation
 - [x] PBR baking
-- [ ] USD export with physics and collision authoring
+- [x] USD export with physics and collision authoring
 - [ ] Runtime coverage across Blender 4.x and 5.x
 - [ ] Asset validation in Isaac Sim
 

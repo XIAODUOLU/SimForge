@@ -10,7 +10,7 @@ This guide explains how to implement SimForge services and use their supporting 
 | `simforge/services/bake.py` | `bake(context, high_poly, low_poly, options, output_directory)` | `BakeResult` with saved textures for every requested channel |
 | `simforge/services/export.py` | `export(context, low_poly, options)` | `ExportResult` pointing to the final USD with physics authored |
 
-Replace each `FeatureNotImplemented` exception with its implementation. External scripts may call these services directly, but must satisfy their preconditions. Examples below are fragments intended for service modules; they are not complete algorithms or standalone scripts.
+The service entry points are implemented. External scripts may call them directly, but must satisfy their preconditions. Examples below are fragments intended for service modules; they are not complete algorithms or standalone scripts.
 
 The existing call chain is:
 
@@ -27,7 +27,7 @@ Workflow creates an options snapshot from panel settings. Services should read `
 | Operator | Require Object Mode; display expected errors and log unexpected exceptions | Keep all bpy operations on the main thread and restore temporary state |
 | Workflow | Check nonempty Mesh inputs and View Layer membership; require active UVs for Bake/Export; reject shared source/target mesh data for Bake | Check geometry quality, usable UV layout, visibility/selectability, materials, and algorithm-specific requirements |
 | Workflow | Resolve output paths; reject existing USD destinations; check returned objects/files | Create directories, validate file contents, handle overwrite races, and clean up failed output |
-| Service | Currently raises `FeatureNotImplemented` | Implement the algorithm and validate its complete result before returning |
+| Service | Own algorithms and temporary resources | Validate the complete result before returning |
 
 Direct service calls bypass Operator and Workflow checks. Callers must establish valid inputs and context; services should also validate assumptions before making changes. Dataclass annotations do not enforce runtime types or numeric ranges, and direct callers bypass the limits imposed by UI properties.
 
@@ -185,7 +185,7 @@ modules = require_usd(with_physx=True)
 PhysxSchema = modules["PhysxSchema"]
 ```
 
-The function returns module objects, not an opened stage. It raises a readable error if bindings are missing; it neither installs dependencies nor automatically runs Isaac Sim.
+The function returns module objects, not an opened stage. Missing core bindings are installed with Blender's Python pip into `simforge_dependencies` in the user scripts directory. Registration performs the same check, so exports normally reuse already loaded bindings. Pip is bootstrapped from Blender's bundled ensurepip if needed. Installation failures report an error and leave no partially installed cache. PhysX-specific bindings require a separate NVIDIA runtime.
 
 ## Results and error handling
 
@@ -259,15 +259,17 @@ Run these commands from the repository root:
 ```bash
 python3 scripts/build.py
 blender -b --factory-startup --python-exit-code 1 --python tests/blender_smoke.py
+blender -b --factory-startup --python-exit-code 1 --python tests/blender_export.py
+blender -b --factory-startup --python-exit-code 1 --python tests/blender_dependencies.py
 python3 -m compileall -q simforge scripts tests
 blender -b --factory-startup --command extension validate simforge
 ```
 
 The Extension validation command requires Blender 4.2 or later. The build script produces legacy and Extension ZIP packages in `dist/` and includes the root MIT license in both.
 
-Integration tests cover registration, unregistration, re-registration, placeholder cancellation, source/target checks, paths, contract forwarding, result validation, and USD argument compatibility branches. Service doubles write files only to check interface behavior; those files are not real textures or complete simulation assets.
+Smoke tests cover registration, source/target checks, paths, contract forwarding, result validation, and USD argument compatibility branches. Service doubles verify interface behavior. The separate export test creates real USDs and textures; the dependency test requires network access and installs packages only into a temporary directory.
 
-The current smoke test uses the default cube, which already has UVs; passing it does not prove UV generation works. Its 5.x compatibility branch uses simulated RNA, not a Blender 5.x runtime. Once an algorithm is implemented, update tests that currently expect its placeholder to cancel. Add real asset checks for its output quality and cleanup behavior. Use the [compatibility validation procedure](compatibility.md#validation-procedure) for testing additional Blender versions.
+The smoke test uses the default cube, which already has UVs; passing it does not prove UV generation works. Its 5.x compatibility branch uses simulated RNA. Export tests cover physics schemas, geometry transforms, material bindings, portable textures and cleanup, but do not run Isaac Sim. Use the [compatibility validation procedure](compatibility.md#validation-procedure) for testing additional Blender versions.
 
 ## Contribution conventions
 
