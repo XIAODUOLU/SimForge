@@ -43,11 +43,15 @@ Workflow checks that a UV layer exists, not that it is properly unwrapped or pac
 | `RetopoOptions.uv_margin` | UV-space spacing; explicitly choose and validate Pack Islands margin semantics |
 | `BakeOptions.resolution` | Texture dimension in pixels |
 | `BakeOptions.cage_extrusion` | Blender scene length units |
-| `BakeOptions.channels` | Requested channels |
+| `BakeOptions.channels` | Unique requested `BakeChannel` values; defaults to normal, base color, metallic, roughness and alpha |
 | `ExportOptions.meters_per_blender_unit` | Scale used to convert scene coordinates to meters |
 | `ExportOptions.physics` | Body type, mass in kilograms, collision approximation, friction, and restitution |
 
 Treat options as immutable. Iterate over `options.channels` rather than assuming a hardcoded list. Return absolute `Path` values for saved textures so results do not depend on the process working directory.
+
+Metallic, roughness and alpha use emission baking in temporary copies of each source material. The service routes the corresponding Principled input through an Emission node, handling constants and linked scalar inputs. Input graphs may contain textures, procedural nodes and node groups; the surface shader itself must be one directly connected Principled BSDF, optionally through reroutes. Data maps, including normal and alpha, use Non-Color; base color uses sRGB.
+
+The sidebar requests all five channels. A direct caller can select a subset with `BakeOptions(channels=(BakeChannel.METALLIC, BakeChannel.ROUGHNESS, BakeChannel.ALPHA))`. Successful results contain absolute PNG paths for every requested channel and a connected target material. Alpha is stored as grayscale RGB and connects through the Image Texture Color output. Output files are not overwritten.
 
 ## Adapter reference
 
@@ -56,6 +60,7 @@ Treat options as immutable. Iterate over `options.channels` rather than assuming
 | `preserve_selection(context)` | All three services | Restores selected objects and the active object |
 | `checked_kwargs(...)` | Retopo, UV operations, baking | Checks operator arguments against the current Blender API |
 | `principled_input(node, name)` | Bake | Retrieves a Principled BSDF input by name |
+| `enable_material_alpha(material)` | Bake | Enables transparent rendering through the available material API |
 | `usd_export_kwargs(filepath)` | Export | Builds USD export arguments for the current Blender version |
 | `require_usd()` | Export | Loads USD Python modules when needed |
 | `ensure_supported_version()` | Already called during registration | Checks the Blender version range |
@@ -269,7 +274,7 @@ The Extension validation command requires Blender 4.2 or later. The build script
 
 Smoke tests cover registration, source/target checks, paths, contract forwarding, result validation, and USD argument compatibility branches. Service doubles verify interface behavior. The separate export test creates real USDs and textures; the dependency test requires network access and installs packages only into a temporary directory.
 
-The smoke test uses the default cube, which already has UVs; passing it does not prove UV generation works. Its 5.x compatibility branch uses simulated RNA. Export tests cover physics schemas, geometry transforms, material bindings, portable textures and cleanup, but do not run Isaac Sim. Use the [compatibility validation procedure](compatibility.md#validation-procedure) for testing additional Blender versions.
+The smoke test uses the default cube, which already has UVs; passing it does not prove UV generation works. The newer USD argument branch uses simulated RNA. Export tests cover physics schemas, geometry transforms, material bindings, portable textures and cleanup, but do not run Isaac Sim. The added metallic, roughness and alpha baking has not been runtime-validated. Use the [compatibility validation procedure](compatibility.md#validation-procedure) for GPU validation on the target equipment.
 
 ## Contribution conventions
 

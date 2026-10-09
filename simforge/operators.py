@@ -42,7 +42,7 @@ class SIMFORGE_OT_retopo(OperationMixin, bpy.types.Operator):
 class SIMFORGE_OT_bake(OperationMixin, bpy.types.Operator):
     bl_idname = "simforge.bake"
     bl_label = "Bake"
-    bl_description = "Bake Normal and Base Color"
+    bl_description = "Bake Normal, Base Color, Metallic, Roughness and Alpha"
     bl_options = {'REGISTER', 'UNDO'}
     run = staticmethod(workflow.run_bake)
 

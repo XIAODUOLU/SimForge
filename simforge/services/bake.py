@@ -1,17 +1,204 @@
-"""Service entry point for projecting PBR detail from the original high-poly source."""
-
+"""Project five PBR channels from the original source onto the low-poly mesh."""
 from __future__ import annotations
-from traceback import format_exc
 
+from contextlib import contextmanager
+import math
 from pathlib import Path
-
-from ..core.contracts import BakeOptions, BakeResult, BakeChannel
-from ..core.errors import SimForgeError
-
-from bpy.types import Context, Object, ShaderNodeTexImage, Mesh, Scene, ViewLayer
+import shutil
+from tempfile import TemporaryDirectory
 
 import bpy
-import os
+
+from ..adapters.blender import enable_material_alpha, principled_input
+from ..adapters.context import preserve_selection
+from ..core.contracts import BakeChannel, BakeOptions, BakeResult
+from ..core.errors import SimForgeError
+
+from bpy.types import Context, Object
+
+
+EMISSION_INPUTS = {
+    BakeChannel.METALLIC: 'Metallic',
+    BakeChannel.ROUGHNESS: 'Roughness',
+    BakeChannel.ALPHA: 'Alpha',
+}
+TARGET_INPUTS = {BakeChannel.BASE_COLOR: 'Base Color', **EMISSION_INPUTS}
+BAKE_SETTINGS = {
+    'use_pass_color': True, 'use_pass_direct': False, 'use_pass_indirect': False,
+    'use_selected_to_active': True, 'use_cage': False, 'max_ray_distance': 0.0,
+    'target': 'IMAGE_TEXTURES', 'use_clear': True,
+    'margin_type': 'ADJACENT_FACES', 'margin': 16,
+    'normal_space': 'TANGENT', 'normal_r': 'POS_X', 'normal_g': 'POS_Y', 'normal_b': 'POS_Z',
+}
+
+
+def _validate(context, high_poly, low_poly, options, output_directory):
+    if context.mode != 'OBJECT':
+        raise SimForgeError('Bake requires Object Mode.')
+    for obj, label in ((high_poly, 'High-poly'), (low_poly, 'Low-poly')):
+        if obj is None or obj.type != 'MESH' or not obj.data.polygons:
+            raise SimForgeError(f'{label} object must be a nonempty mesh.')
+        if context.view_layer.objects.get(obj.name) != obj:
+            raise SimForgeError(f'{label} object must be in the current view layer.')
+    if high_poly == low_poly or high_poly.data == low_poly.data:
+        raise SimForgeError('Bake source and target must have independent meshes.')
+    if low_poly.data.users > 1:
+        raise SimForgeError('Make the low-poly mesh single-user before baking.')
+    if low_poly.data.uv_layers.active is None:
+        raise SimForgeError('The low-poly mesh needs an active UV map.')
+    if not isinstance(options.resolution, int) or options.resolution <= 0:
+        raise SimForgeError('Texture resolution must be a positive integer.')
+    if not math.isfinite(options.cage_extrusion) or options.cage_extrusion < 0:
+        raise SimForgeError('Cage extrusion must be finite and nonnegative.')
+    if (not options.channels or any(not isinstance(channel, BakeChannel) for channel in options.channels)
+            or len(set(options.channels)) != len(options.channels)):
+        raise SimForgeError('Bake channels must be a nonempty sequence of unique BakeChannel values.')
+    for index in {face.material_index for face in high_poly.data.polygons}:
+        if index >= len(high_poly.material_slots) or high_poly.material_slots[index].material is None:
+            raise SimForgeError('Every high-poly face must have a source material.')
+    directory = Path(output_directory)
+    if not directory.is_absolute():
+        raise SimForgeError('Bake requires an absolute texture directory.')
+    stem = bpy.path.clean_name(low_poly.name) or 'asset'
+    paths = {channel: directory / f'{stem}{channel.value}.png' for channel in options.channels}
+    for path in paths.values():
+        if path.exists():
+            raise SimForgeError(f'Texture already exists; choose another output directory: {path}')
+    return directory, paths
+
+
+def _principled_surface(material):
+    """Support one surface Principled BSDF, optionally connected through reroutes.
+
+    Its inputs may use textures, procedural nodes or node groups. Shader mixes
+    and a Principled BSDF hidden inside a shader group are deliberately rejected
+    because their effective scalar inputs cannot be inferred unambiguously.
+    """
+    tree = material.node_tree
+    output = tree.get_output_node('CYCLES')
+    if output is None or not output.inputs['Surface'].is_linked:
+        raise SimForgeError(f'Material {material.name!r} has no connected surface output.')
+    node = output.inputs['Surface'].links[0].from_node
+    seen = set()
+    while node.type == 'REROUTE':
+        if node.as_pointer() in seen or not node.inputs[0].is_linked:
+            raise SimForgeError(f'Material {material.name!r} has an invalid surface connection.')
+        seen.add(node.as_pointer())
+        node = node.inputs[0].links[0].from_node
+    if node.type != 'BSDF_PRINCIPLED':
+        raise SimForgeError(f'Material {material.name!r} must connect one Principled BSDF to its surface output.')
+    return output, node
+
+
+def _source_copy(material, channel):
+    temporary = material.copy()
+    try:
+        temporary.name = material.name + '_SimForgeBake'
+        if not temporary.use_nodes:
+            temporary.use_nodes = True
+            _, bsdf = _principled_surface(temporary)
+            for name, value in (('Base Color', material.diffuse_color), ('Metallic', material.metallic),
+                                ('Roughness', material.roughness), ('Alpha', material.diffuse_color[3])):
+                principled_input(bsdf, name).default_value = value
+        if channel == BakeChannel.NORMAL:
+            return temporary
+        output, bsdf = _principled_surface(temporary)
+        nodes, links = temporary.node_tree.nodes, temporary.node_tree.links
+        if channel == BakeChannel.BASE_COLOR:
+            # A fully metallic/transparent surface must still supply its base color.
+            for name in ('Metallic', 'Alpha', 'Transmission Weight'):
+                socket = principled_input(bsdf, name)
+                for link in tuple(socket.links):
+                    links.remove(link)
+                socket.default_value = 1.0 if name == 'Alpha' else 0.0
+            return temporary
+        socket = principled_input(bsdf, EMISSION_INPUTS[channel])
+        emission = nodes.new('ShaderNodeEmission')
+        emission.name = 'SimForgeEmission'
+        emission.inputs['Strength'].default_value = 1.0
+        if socket.is_linked:
+            # Preserve the original scalar socket's color-to-value conversion.
+            scalar = nodes.new('ShaderNodeMath')
+            scalar.operation = 'MULTIPLY'
+            scalar.inputs[1].default_value = 1.0
+            links.new(socket.links[0].from_socket, scalar.inputs[0])
+            links.new(scalar.outputs[0], emission.inputs['Color'])
+        else:
+            value = socket.default_value
+            emission.inputs['Color'].default_value = (value, value, value, 1.0)
+        for link in tuple(output.inputs['Surface'].links):
+            links.remove(link)
+        links.new(emission.outputs['Emission'], output.inputs['Surface'])
+        return temporary
+    except Exception:
+        bpy.data.materials.remove(temporary)
+        raise
+
+
+@contextmanager
+def _source_materials(high_poly, channel):
+    """Object-linked overrides avoid editing source mesh slots or shared materials."""
+    bindings = [(index, high_poly.material_slots[index].link, high_poly.material_slots[index].material)
+                for index in sorted({face.material_index for face in high_poly.data.polygons})]
+    copies = {}
+    try:
+        for index, _, original in bindings:
+            key = original.as_pointer()
+            if key not in copies:
+                copies[key] = _source_copy(original, channel)
+            slot = high_poly.material_slots[index]
+            slot.link = 'OBJECT'
+            slot.material = copies[key]
+        yield
+    finally:
+        for index, link, material in bindings:
+            slot = high_poly.material_slots[index]
+            slot.material = material  # Still object-linked; never mutate shared mesh slots.
+            slot.link = link
+        for material in copies.values():
+            bpy.data.materials.remove(material)
+
+
+def _target_material(low_poly, options, images):
+    material = bpy.data.materials.new(low_poly.name + '_BakedMaterial')
+    try:
+        material.use_nodes = True
+        nodes, links = material.node_tree.nodes, material.node_tree.links
+        nodes.clear()
+        output = nodes.new('ShaderNodeOutputMaterial')
+        bsdf = nodes.new('ShaderNodeBsdfPrincipled')
+        links.new(bsdf.outputs['BSDF'], output.inputs['Surface'])
+        textures = {}
+        for channel in options.channels:
+            image = bpy.data.images.new(f'{low_poly.name}_{channel.value}',
+                                        width=options.resolution, height=options.resolution, alpha=True)
+            images.append(image)
+            image.colorspace_settings.name = 'sRGB' if channel == BakeChannel.BASE_COLOR else 'Non-Color'
+            texture = nodes.new('ShaderNodeTexImage')
+            texture.name = texture.label = channel.value
+            texture.image = image
+            textures[channel] = texture
+        # Connect baked maps only after all passes finish, avoiding feedback from
+        # the target's normal/alpha textures while subsequent channels are baked.
+        return material, bsdf, textures
+    except Exception:
+        bpy.data.materials.remove(material)
+        raise
+
+
+def _connect_textures(material, bsdf, textures):
+    nodes, links = material.node_tree.nodes, material.node_tree.links
+    for channel, texture in textures.items():
+        if channel == BakeChannel.NORMAL:
+            normal_map = nodes.new('ShaderNodeNormalMap')
+            normal_map.space = 'TANGENT'
+            links.new(texture.outputs['Color'], normal_map.inputs['Color'])
+            links.new(normal_map.outputs['Normal'], principled_input(bsdf, 'Normal'))
+        else:
+            # Scalar alpha is stored in RGB; the PNG alpha component is not the mask.
+            links.new(texture.outputs['Color'], principled_input(bsdf, TARGET_INPUTS[channel]))
+    if BakeChannel.ALPHA in textures:
+        enable_material_alpha(material)
 
 
 def bake(
@@ -21,197 +208,116 @@ def bake(
     options: BakeOptions,
     output_directory: Path,
 ) -> BakeResult:
-    """Bake requested channels, connect target textures and return saved files.
+    """Bake requested PBR maps on the main thread, using Cycles selected-to-active.
 
-    Args:
-        context (bpy.types.Context): Blender execution context, normally bpy.context
-            or the Operator's context. Supplies scene/render settings, view layer
-            and selection. Call in Object Mode on Blender's main thread.
-        high_poly (bpy.types.Object): Original nonempty MESH source in the current
-            view layer, with the source surface detail and materials to transfer.
-            Preserve its mesh and materials; it is not a remeshed intermediate.
-        low_poly (bpy.types.Object): Nonempty MESH target in the current view layer
-            with usable active UVs. Must be a different object with different mesh
-            data from high_poly. Its materials receive the baked textures.
-        options (BakeOptions): Immutable settings snapshot. resolution
-            is pixels; cage_extrusion is in scene length units;
-            channels is a tuple of BakeChannel members, defaulting to pbr textures.
-            See core.contracts.BakeOptions for types and defaults.
-        output_directory (pathlib.Path): Absolute texture output directory,
-            resolved by workflow before this call. Create it if needed. This is
-            a directory path, not an image filename or Blender's // path string.
+    NORMAL uses tangent-space normal baking and BASE_COLOR uses diffuse color
+    without lighting. METALLIC, ROUGHNESS and ALPHA route the source Principled
+    inputs through Emission nodes in temporary material copies. Constants and
+    linked inputs are supported across all used source material slots.
 
-    Returns:
-        BakeResult: Return BakeResult(textures=saved_textures), where
-            saved_textures is a Mapping[BakeChannel, pathlib.Path], typically a
-            dict. Include every options.channels member and map it to an absolute
-            path of a saved, validated texture file, not a bpy.types.Image.
-            Also connect the textures to the low-poly material before returning.
-
-    Use Cycles selected-to-active baking with the original high-poly source
-    selected and the low-poly target active. NORMAL uses tangent space;
-    BASE_COLOR excludes direct and indirect lighting.
-    METALLIC and ALPHA have no general native bake types: route their inputs
-    through Emission in temporary materials and bake EMIT. ROUGHNESS can use
-    its native channel. Use sRGB for BASE_COLOR and Non-Color for all data maps,
-    including normals.
-
-    Handle all source material slots. Edit material copies only, and restore
-    the render engine, bake settings, visibility, selection, active object and
-    temporary nodes/materials in finally blocks.
-    An explicit cage must match the target topology; a double-layer Solidify
-    mesh cannot be used directly as a cage. The implementation owns naming,
-    overwrite policy and failure cleanup; never silently overwrite existing files.
+    Defaults include all five channels; direct callers may request a subset.
+    The target mesh must be single-user and have active UVs. On success its
+    materials are replaced with one connected baked material. Source materials,
+    selection, visibility, render and bake settings are restored. Failed runs
+    restore target materials and remove only this run's images, materials/files.
+    Existing texture files are never overwritten.
     """
-
+    directory, paths = _validate(context, high_poly, low_poly, options, output_directory)
+    scene = context.scene
+    render_engine, device = scene.render.engine, scene.cycles.device
+    bake_settings = scene.render.bake
+    saved_settings = {name: getattr(bake_settings, name) for name in (*BAKE_SETTINGS, 'cage_extrusion')}
+    old_materials = tuple(low_poly.data.materials)
+    old_bindings = tuple((slot.link, slot.material) for slot in low_poly.material_slots)
+    old_indices = tuple(face.material_index for face in low_poly.data.polygons)
+    visibility = [(obj, obj.hide_render, obj.hide_viewport, obj.hide_get(view_layer=context.view_layer), obj.hide_select)
+                  for obj in (high_poly, low_poly)]
+    material = None
+    images, published = [], []
+    target_assigned = succeeded = False
     try:
-        # Ensure the mode is OBJECT
-        if bpy.context.mode != "OBJECT":
-            bpy.ops.object.mode_set(mode="OBJECT")
-
-        if not (
-            isinstance(context.view_layer, ViewLayer)
-            and isinstance(context.scene, Scene)
-        ):
-            raise SimForgeError("Bake Error: context error")
-
-        if high_poly.name not in context.view_layer.objects:
-            context.scene.collection.objects.link(high_poly)
-        if low_poly.name not in context.view_layer.objects:
-            context.scene.collection.objects.link(low_poly)
-
-        if not isinstance(low_poly.data, Mesh):
-            raise SimForgeError("Bake Error: LowPoly is not a Mesh")
-
-        # Define new material
-        mat = bpy.data.materials.new(name=low_poly.name + "Material")
-        mat.use_nodes = True
-
-        if not mat.node_tree:
-            raise SimForgeError("Bake Error: material does not have node_tree")
-
-        # Get nodes and links
-        nodes = mat.node_tree.nodes
-        links = mat.node_tree.links
-
-        # Clear the default nodes
-        nodes.clear()
-
-        # Add new nodes and images
-        output = nodes.new(type="ShaderNodeOutputMaterial")
-        bsdf = nodes.new(type="ShaderNodeBsdfPrincipled")
-        diffuse = nodes.new(type="ShaderNodeTexImage")
-        diffuse_image = bpy.data.images.new(
-            low_poly.name + "Diffuse",
-            width=options.resolution,
-            height=options.resolution,
-            alpha=True,
-        )
-
-        normal = nodes.new(type="ShaderNodeTexImage")
-        normal_image = bpy.data.images.new(
-            low_poly.name + "Normal",
-            width=options.resolution,
-            height=options.resolution,
-            alpha=True,
-        )
-        normal_image.colorspace_settings.name = "Linear CIE-XYZ D65"
-        normal_map = nodes.new(type="ShaderNodeNormalMap")
-
-        # Setup links
-        links.new(diffuse.outputs["Color"], bsdf.inputs["Base Color"])
-        links.new(bsdf.outputs["BSDF"], output.inputs["Surface"])
-        links.new(diffuse.outputs["Color"], bsdf.inputs["Base Color"])
-        links.new(normal.outputs["Color"], normal_map.inputs["Color"])
-        links.new(normal_map.outputs["Normal"], bsdf.inputs["Normal"])
-
-        if not isinstance(diffuse, ShaderNodeTexImage):
-            raise SimForgeError("Bake Error: diffuse node is not ShaderNodeTexImage")
-        if not isinstance(normal, ShaderNodeTexImage):
-            raise SimForgeError("Bake Error: normal node is not ShaderNodeTexImage")
-
-        diffuse.image = diffuse_image
-        normal.image = normal_image
-
-        if low_poly.data.materials:
-            low_poly.data.materials.clear()
-        else:
-            low_poly.data.materials.append(mat)
-
-        # Bake options
-        if not isinstance(context.scene, Scene):
-            raise SimForgeError("Bake Error: scene does not exist")
-
-        context.scene.render.engine = "CYCLES"
-        context.scene.cycles.device = "GPU"
-
-        context.scene.render.bake.use_pass_color = True
-        context.scene.render.bake.use_pass_direct = False
-        context.scene.render.bake.use_pass_indirect = False
-
-        context.scene.render.bake.use_selected_to_active = True
-        context.scene.render.bake.cage_extrusion = options.cage_extrusion
-        context.scene.render.bake.max_ray_distance = 0
-
-        context.scene.render.bake.target = "IMAGE_TEXTURES"
-
-        context.scene.render.bake.use_clear = True
-        context.scene.render.bake.margin_type = "ADJACENT_FACES"
-        context.scene.render.bake.margin = 16
-
-        # Set select objects
-        bpy.ops.object.select_all(action="DESELECT")
-
-        low_poly.select_set(True)
-        high_poly.select_set(True)
-
-        context.view_layer.objects.active = low_poly
-
-        for node in nodes:
-            node.select = False
-        diffuse.select = True
-        nodes.active = diffuse
-
-        # Bake Diffuse Image
-        bpy.ops.object.bake(type="DIFFUSE")
-
-        # Save Diffuse Image
-        diffuse_image.filepath_raw = bpy.path.abspath(
-            os.path.join(output_directory, diffuse_image.name)
-        )
-        diffuse_image.file_format = "PNG"
-        diffuse_image.save()
-
-        # Set select objects
-        bpy.ops.object.select_all(action="DESELECT")
-
-        low_poly.select_set(True)
-        high_poly.select_set(True)
-
-        context.view_layer.objects.active = low_poly
-
-        for node in nodes:
-            node.select = False
-        normal.select = True
-        nodes.active = normal
-
-        # Bake Normal Image
-        bpy.ops.object.bake(type="NORMAL")
-
-        # Save Normal Image
-        normal_image.filepath_raw = bpy.path.abspath(
-            os.path.join(output_directory, normal_image.name)
-        )
-        normal_image.file_format = "PNG"
-        normal_image.save()
-
-        return BakeResult(
-            {
-                BakeChannel.BASE_COLOR: Path(diffuse_image.filepath_raw),
-                BakeChannel.NORMAL: Path(normal_image.filepath_raw),
-            }
-        )
-
-    except Exception as e:
-        print(format_exc())
-        raise SimForgeError("Bake Error") from e
+        directory.mkdir(parents=True, exist_ok=True)
+        with preserve_selection(context):
+            try:
+                for obj, *_ in visibility:
+                    obj.hide_render = obj.hide_viewport = obj.hide_select = False
+                    obj.hide_set(False, view_layer=context.view_layer)
+                for obj in tuple(context.selected_objects):
+                    obj.select_set(False)
+                high_poly.select_set(True)
+                low_poly.select_set(True)
+                context.view_layer.objects.active = low_poly
+                if not high_poly.select_get() or not low_poly.select_get():
+                    raise SimForgeError('Make both bake objects selectable in their collections.')
+                scene.render.engine = 'CYCLES'
+                scene.cycles.device = 'GPU'
+                for name, value in BAKE_SETTINGS.items():
+                    setattr(bake_settings, name, value)
+                bake_settings.cage_extrusion = options.cage_extrusion
+                material, bsdf, textures = _target_material(low_poly, options, images)
+                target_assigned = True
+                low_poly.data.materials.clear()
+                low_poly.data.materials.append(material)
+                low_poly.material_slots[0].link = 'DATA'
+                for face in low_poly.data.polygons:
+                    face.material_index = 0
+                with TemporaryDirectory(prefix='.simforge-bake-', dir=directory) as temporary:
+                    staging = Path(temporary)
+                    for channel, texture in textures.items():
+                        for node in material.node_tree.nodes:
+                            node.select = False
+                        texture.select = True
+                        material.node_tree.nodes.active = texture
+                        with _source_materials(high_poly, channel):
+                            if channel == BakeChannel.NORMAL:
+                                result = bpy.ops.object.bake(type='NORMAL')
+                            elif channel == BakeChannel.BASE_COLOR:
+                                result = bpy.ops.object.bake(type='DIFFUSE')
+                            else:
+                                # Blender's internal enum for emission baking.
+                                result = bpy.ops.object.bake(type='EMIT')
+                            if result != {'FINISHED'}:
+                                raise SimForgeError(f'{channel.value} baking did not finish.')
+                        image = texture.image
+                        image.filepath_raw = str(staging / paths[channel].name)
+                        image.file_format = 'PNG'
+                        image.save()
+                    _connect_textures(material, bsdf, textures)
+                    for channel, texture in textures.items():
+                        path = paths[channel]
+                        with path.open('xb') as output:
+                            published.append(path)
+                            with (staging / path.name).open('rb') as source:
+                                shutil.copyfileobj(source, output)
+                        texture.image.filepath_raw = str(path)
+                succeeded = True
+            finally:
+                for name, value in saved_settings.items():
+                    setattr(bake_settings, name, value)
+                scene.cycles.device = device
+                scene.render.engine = render_engine
+                if not succeeded and target_assigned:
+                    low_poly.data.materials.clear()
+                    for original in old_materials:
+                        low_poly.data.materials.append(original)
+                    for slot, (link, original) in zip(low_poly.material_slots, old_bindings):
+                        slot.link = link
+                        slot.material = original
+                    for face, index in zip(low_poly.data.polygons, old_indices):
+                        face.material_index = index
+                # Selection restoration must run before restoring hide/select locks.
+    except OSError as exc:
+        raise SimForgeError(f'Cannot save baked textures: {exc}') from exc
+    finally:
+        for obj, hide_render, hide_viewport, hidden, hide_select in visibility:
+            obj.hide_render, obj.hide_viewport = hide_render, hide_viewport
+            obj.hide_set(hidden, view_layer=context.view_layer)
+            obj.hide_select = hide_select
+        if not succeeded:
+            for path in published:
+                path.unlink(missing_ok=True)
+            if material is not None:
+                bpy.data.materials.remove(material)
+            for image in images:
+                bpy.data.images.remove(image)
+    return BakeResult(textures=paths)

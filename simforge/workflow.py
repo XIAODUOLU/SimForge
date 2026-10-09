@@ -77,7 +77,7 @@ def run_bake(context):
     result = bake.bake(
         context, settings.high_poly, settings.low_poly, options, directory
     )
-    for channel in result.textures:
+    for channel in options.channels:
         path = result.textures.get(channel)
         if path is None or not Path(path).is_file():
             raise SimForgeError(f"Bake did not return a saved {channel.value} texture.")

@@ -61,3 +61,14 @@ def principled_input(node, name):
     if socket is None:
         raise CompatibilityError(f"Principled BSDF is missing input: {name}")
     return socket
+
+
+def enable_material_alpha(material):
+    """Enable alpha rendering through the material settings available in this build."""
+    properties = material.bl_rna.properties
+    if 'surface_render_method' in properties:
+        material.surface_render_method = 'DITHERED'
+    elif 'blend_method' in properties:
+        material.blend_method = 'HASHED'
+    else:
+        raise CompatibilityError("This Blender build has no supported material alpha setting.")

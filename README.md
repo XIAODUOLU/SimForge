@@ -12,11 +12,11 @@ High-poly asset → Retopology & UVs → PBR baking → USD with physics & colli
 
 **Early development · version 0.1.0**
 
-The add-on provides retopology, base-color/normal baking, and USD export with collision and rigid-body schemas. Export has been tested in Blender 4.x; validation inside Isaac Sim is still pending.
+The add-on provides retopology, five-channel PBR baking, and USD export with collision and rigid-body schemas. The new metallic, roughness and alpha baking implementation awaits GPU runtime validation; validation inside Isaac Sim is also pending.
 
-## Planned capabilities
+## Capabilities
 
-| Stage | Intended output |
+| Stage | Output |
 | --- | --- |
 | **Retopo** | A separate low-poly mesh with Smart UV Project and packed UV islands |
 | **Bake** | Normal, base color, metallic, roughness, and alpha textures transferred from the original high-poly source |
@@ -26,7 +26,7 @@ The workflow preserves the original high-poly mesh as the baking source. Export 
 
 ## Requirements
 
-- **Blender 4.x–5.x** is the compatibility target. Registration, USD export, pip dependency installation and Extension manifest validation pass in **Blender 4.x**. Blender 5.x runtime validation is pending; this does not establish coverage of every release in either range.
+- **Blender 4.x–5.x** is the compatibility target. Earlier checks cover registration, USD export, pip dependency installation and Extension manifests. Runtime coverage across the supported range is incomplete.
 - **Python 3.10 or later** is needed to build installation packages from source using the provided script. The add-on itself runs inside Blender's Python environment.
 - On first enable, SimForge uses existing USD Python bindings if available, otherwise installs `usd-core>=24.5,<27` through Blender's Python pip. The first installation requires network access. Dependencies are cached in Blender's user scripts directory under `simforge_dependencies`, independently of system Python. Installation packages contain no dependency wheels.
 

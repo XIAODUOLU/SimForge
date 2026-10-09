@@ -62,7 +62,7 @@ try:
         def fake_bake(context, source, target, options, output):
             assert source == high and target == low
             textures = {}
-            for channel in (BakeChannel.BASE_COLOR, BakeChannel.NORMAL):
+            for channel in options.channels:
                 path = output / f'{channel.value}.png'
                 path.write_bytes(b'test contract only')
                 textures[channel] = path

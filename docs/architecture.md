@@ -62,13 +62,19 @@ Smart UV uses radians. Specify Pack Islands margin semantics explicitly in the a
 | --- | --- | --- | --- |
 | NORMAL | Tangent-space normals | Non-Color | NORMAL, with the target active |
 | BASE_COLOR | Diffuse/base color without lighting | sRGB | DIFFUSE, Color only |
-| METALLIC | Metallic scalar | Non-Color | EMIT through a temporary material |
-| ROUGHNESS | Roughness scalar | Non-Color | ROUGHNESS or temporary EMIT |
-| ALPHA | Opacity scalar | Non-Color | EMIT through a temporary material |
+| METALLIC | Metallic scalar | Non-Color | Source Metallic input → Emission in a temporary material |
+| ROUGHNESS | Roughness scalar | Non-Color | Source Roughness input → Emission in a temporary material |
+| ALPHA | Opacity scalar | Non-Color | Source Alpha input → Emission in a temporary material |
 
-Handle constant values when source materials have no textures, and cover all material slots. Complex node graphs may not reduce to one Principled BSDF. Define the supported graph scope and report unsupported graphs explicitly. Do not assume `METALLIC` or `ALPHA` bake types exist.
+`BakeChannel` defines all five channels, and `BakeOptions.channels` defaults to all of them. Direct callers may request a nonempty subset without duplicate channels; workflow checks that every requested channel has a returned file. `BakeResult.textures` maps each requested enum member to an absolute PNG path.
 
-The service creates output directories, manages the active Image Texture for every material slot, saves pbr maps and connects the target material. Restore engine changes, temporary materials, ray settings and visibility using `try/finally`. An explicit cage must satisfy target topology constraints; do not use a double-layer Solidify mesh directly as a cage.
+Scalar extraction supports a Principled BSDF connected to the active Cycles surface output, optionally through reroutes. Its inputs may receive textures, procedural nodes or node groups, or use constant values. Shader mixes and a surface BSDF inside a shader group are reported as unsupported. Source materials without nodes use their base color, metallic, roughness and alpha properties. Linked color inputs are converted through a scalar socket before entering the Emission node, preserving the source scalar interpretation.
+
+Every used source material slot gets a temporary copy through an object-linked override, preserving source mesh slots and shared materials. The scalar Emission shader is connected to the temporary material output at strength 1. Base-color baking temporarily disables metallic, transparency and transmission contributions so fully metallic/transparent surfaces still provide color. Normal baking preserves the original source shader graph.
+
+The target must have active UVs and single-user mesh data. Bake replaces its material slots with one target material and assigns all faces to it. The active Image Texture changes per channel; maps are connected only after all passes finish to avoid feedback. Alpha uses the grayscale texture's Color output, not its PNG alpha component. A version adapter enables transparent rendering.
+
+Output names are `<LowPolyName><Channel>.png`. Files are staged and published without overwriting existing textures. On failure, target bindings and face material indices are restored and only the current run's images, material and files are removed. Engine, device, bake settings, visibility and selection are restored on both success and failure. Baking uses selected-to-active projection with cage extrusion and no explicit cage object.
 
 ## USD and Isaac Sim contract
 

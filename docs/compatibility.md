@@ -12,7 +12,7 @@ For installation, see the [README](../README.md#installation). For build command
 
 The Extension manifest requires 4.2 because that installation format starts with 4.2; the business code targets 4.0 and later. Both the manifest and runtime check exclude 6.0. Passing tests in one version does not establish coverage of every 4.x/5.x release.
 
-Validation uses Blender 4.x. The smoke test covers registration, input/path checks, parameter forwarding, result contracts and USD exporter argument adaptation. Real USD tests cover dynamic/static bodies, both collision approximations, physics materials, modifier evaluation, negative/nonuniform scale, parent transforms, units, texture relocation and failure cleanup. Pip installation and cached dependency reuse are tested with Blender's Python in temporary user data. The simulated Blender 5.x RNA branch does not replace runtime tests. Retopology/baking quality and Isaac Sim simulation behavior remain outside this validation scope.
+Existing validation covers registration, input/path checks, parameter forwarding, result contracts and USD exporter argument adaptation. Real USD tests cover dynamic/static bodies, both collision approximations, physics materials, modifier evaluation, negative/nonuniform scale, parent transforms, units, texture relocation and failure cleanup. Pip installation and cached dependency reuse are tested with Blender's Python in temporary user data. Simulated RNA branches do not replace runtime tests. Retopology/baking quality and Isaac Sim simulation behavior remain outside this validation scope. The newly added metallic, roughness and alpha baking is awaiting GPU validation; no runtime checks were run for this change.
 
 ## Adapter boundaries
 
@@ -22,7 +22,7 @@ Validation uses Blender 4.x. The smoke test covers registration, input/path chec
 4. Access Principled inputs by name to avoid socket index changes between versions.
 5. Registration checks USD bindings and installs missing `usd-core` with Blender's own Python pip into plugin user data. Working native bindings take priority. This requires network access only on the first missing-dependency installation. `PhysxSchema` is not needed for the implemented export and is not supplied by `usd-core`.
 6. Use syntax supported by the Python bundled with the minimum supported Blender 4.x release. Modules declaring RNA properties must not use postponed annotations.
-7. UV/QuadriFlow, transparent material settings, Cycles and full USD export arguments still need adaptation during algorithm implementation. The scaffold does not guarantee compatibility of arbitrary future implementations.
+7. Alpha baking connects a Non-Color grayscale texture to the target Alpha input. The adapter uses `surface_render_method` when available, otherwise `blend_method`. Cycles GPU baking requires a configured device in Blender preferences.
 
 ## Validation procedure
 
