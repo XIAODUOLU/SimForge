@@ -1,80 +1,79 @@
 # SimForge
 
-**From AI-3D-generated meshes to simulation-ready assets.**
+[![Version](https://img.shields.io/badge/version-1.0.0-2563EB)](#installation)
+[![Blender](https://img.shields.io/badge/Blender-4.x%20%7C%205.x-F5792A?logo=blender&logoColor=white)](#compatibility)
+[![Isaac Sim](https://img.shields.io/badge/Isaac%20Sim-6.x%20validated-76B900)](#validation)
+[![License: MIT](https://img.shields.io/badge/license-MIT-22A06B)](LICENSE)
 
-SimForge is an open-source Blender add-on for preparing meshes from Hy3D, Tripo, and other AI 3D generation tools for simulation. It brings retopology, PBR texture baking, and USD export for NVIDIA Isaac Sim into a single workflow inside Blender.
+**Prepare AI-generated 3D meshes for simulation in Blender.**
+
+SimForge is a Blender add-on that turns high-poly meshes from Hy3D, Tripo, and other generators into reusable USD assets for NVIDIA Isaac Sim. It combines retopology, UV generation, five-channel PBR baking, and physics-aware export in one workflow.
 
 ```text
-High-poly asset → Retopology & UVs → PBR baking → USD with physics & collision
+High-poly mesh → Retopology and UVs → PBR textures → USD asset with collision and physics
 ```
 
-## Project status
+## Features
 
-**Early development · version 0.1.0**
-
-The add-on provides retopology, five-channel PBR baking, and USD export with collision and rigid-body schemas. The new metallic, roughness and alpha baking implementation awaits GPU runtime validation; validation inside Isaac Sim is also pending.
-
-## Capabilities
-
-| Stage | Output |
+| Step | What SimForge produces |
 | --- | --- |
-| **Retopo** | A separate low-poly mesh with Smart UV Project and packed UV islands |
-| **Bake** | Normal, base color, metallic, roughness, and alpha textures transferred from the original high-poly source |
-| **Export** | A reusable USD asset with materials, collision geometry, and rigid-body properties for Isaac Sim |
+| **Retopo** | An independent low-poly mesh with Smart UV Project and packed UV islands; the source mesh remains available for baking. |
+| **Bake** | Normal, base color, metallic, roughness, and alpha textures, connected to a material on the low-poly mesh. |
+| **Export** | A USD asset with portable texture references, visual and physics materials, and collision settings for dynamic or static use. |
 
-The workflow preserves the original high-poly mesh as the baking source. Export is designed to support dynamic and static assets, configurable mass and friction, and convex hull or convex decomposition collision approximations.
+Export supports convex hull and convex decomposition collision approximations, configurable rigid-body mass, friction, and restitution. You can also export an existing prepared mesh without running Retopo or Bake first.
 
-## Requirements
+## Compatibility
 
-- **Blender 4.x–5.x** is the compatibility target. Earlier checks cover registration, USD export, pip dependency installation and Extension manifests. Runtime coverage across the supported range is incomplete.
-- **Python 3.10 or later** is needed to build installation packages from source using the provided script. The add-on itself runs inside Blender's Python environment.
-- On first enable, SimForge uses existing USD Python bindings if available, otherwise installs `usd-core>=24.5,<27` through Blender's Python pip. The first installation requires network access. Dependencies are cached in Blender's user scripts directory under `simforge_dependencies`, independently of system Python. Installation packages contain no dependency wheels.
+- **Blender 4.x and 5.x** are the supported version families. Blender 4.0–4.1 use the Legacy add-on package; Blender 4.2–5.x use the Extension package.
+- **Isaac Sim 6.x** has been used to validate exported asset physics. Isaac Sim is required to consume and simulate the USD assets, not to run the Blender add-on.
+- **Python 3.10+** is required only when building installation packages from source. The add-on runs with Blender's bundled Python.
+- **Cycles GPU rendering** must be configured in Blender preferences for texture baking.
 
-See the [compatibility guide](docs/compatibility.md) for the validation scope and adapter boundaries.
+See the [compatibility guide](docs/compatibility.md) for test scope and version-specific behavior.
 
 ## Installation
 
-Build the packages from the repository root:
+From the repository root, build both installation packages:
 
 ```bash
 python3 scripts/build.py
 ```
 
-| Blender version | Package | Installation |
+| Blender version | Package | Install from Blender |
 | --- | --- | --- |
-| 4.0–4.1 | `dist/simforge-0.1.0-legacy.zip` | Preferences → Add-ons → Install, then enable SimForge |
-| 4.2–5.x | `dist/simforge-0.1.0-extension.zip` | Preferences → Get Extensions → menu → Install from Disk |
+| 4.0–4.1 | `dist/simforge-1.0.0-legacy.zip` | **Edit → Preferences → Add-ons → Install**, then enable SimForge. |
+| 4.2–5.x | `dist/simforge-1.0.0-extension.zip` | **Edit → Preferences → Get Extensions → Install from Disk**. |
 
-## Getting started
+On first enable, SimForge uses available USD Python bindings or installs `usd-core>=24.5,<27` into Blender's user scripts directory. A first-time installation may require network access. Installation packages do not bundle dependency wheels.
 
-1. Import a high-poly asset into Blender and switch to Object Mode.
-2. Press `N` in the 3D View and open the **SimForge** tab.
-3. Assign **High Poly**, or leave it empty to use the active object for Retopo.
-4. Configure the target face count, UV settings, texture output, and USD physics settings.
+## Quick start
 
-The processing order is **Retopo → Bake → Export**. Export also accepts an existing prepared mesh with an active UV map and valid materials. Default paths use Blender's `//` notation: save the `.blend` file first or choose absolute output paths.
+1. Import a high-poly mesh, save the `.blend` file, and switch to **Object Mode**.
+2. In the 3D View, press **N** and open the **SimForge** tab.
+3. Select the source mesh and assign it to **High Poly**, or leave that field empty and make the mesh active.
+4. Set the retopology options and click **Retopo**. SimForge creates a separate low-poly mesh with UVs.
+5. Set the texture output directory and click **Bake** to transfer all five PBR channels from the source mesh.
+6. Choose the USD path and physics settings, then click **Export**.
 
-Export writes a reusable `/Asset` component with Z-up, meter coordinates, relative textures in `<asset_name>_textures/`, and a separate physics material binding that preserves the visual material. Move the USD and its texture directory together. Existing USD files and texture directories are never overwritten.
+For an existing prepared mesh, assign it to **Low Poly** and export directly. It must have an active UV map and valid materials. Paths beginning with `//` are relative to the saved `.blend` file; choose an absolute path if the scene has not been saved.
 
-Dynamic assets receive a rigid body and mass in kilograms; static assets receive collision only. The default parameters are 1 kg, convex hull collision, static/dynamic friction 0.5, and restitution 0. Adjust these to the object's measured properties; use convex decomposition for concave geometry. Isaac Sim computes collider decomposition, center of mass and inertia when loading. The asset does not create a global physics scene.
+## USD output
+
+The export creates a reusable `/Asset` component in Z-up, meter-based coordinates. Textures are stored beside the USD in `<asset_name>_textures/` and referenced by relative paths; keep the USD and its texture directory together when moving the asset.
+
+Dynamic assets include a rigid body and mass. Static assets include collision without a dynamic rigid body. The visual material and physics material remain separate. The consuming Isaac Sim scene supplies its own global physics scene. SimForge does not overwrite existing USD files or texture directories.
+
+## Validation
+
+Package installation and the complete Retopo → GPU Bake → USD Export workflow have been tested in Blender 4.x and 5.x. Assets exported from both version families have undergone physics testing in Isaac Sim 6.x. The repository includes Blender integration tests and an Isaac Sim asset test; the [compatibility guide](docs/compatibility.md#validation-procedure) has the reproduction commands and scope.
 
 ## Documentation
 
-- [Development guide](docs/development.md): implement the three services, use adapters, build packages, and run checks.
-- [Architecture](docs/architecture.md): module responsibilities, data contracts, processing requirements, and resource cleanup.
-- [Compatibility](docs/compatibility.md): supported ranges, validation scope, dependency handling, and validation procedures.
-
-## Roadmap
-
-- [x] Add-on registration, settings, and sidebar
-- [x] Service contracts, validation, and basic version adapters
-- [x] Legacy and Extension packaging
-- [x] Retopology with mesh validation and UV generation
-- [x] PBR baking
-- [x] USD export with physics and collision authoring
-- [ ] Runtime coverage across Blender 4.x and 5.x
-- [ ] Asset validation in Isaac Sim
+- [Compatibility guide](docs/compatibility.md) — installation formats, version differences, and validation.
+- [Development guide](docs/development.md) — service entry points, build commands, and contribution conventions.
+- [Architecture](docs/architecture.md) — module boundaries and processing contracts.
 
 ## License
 
-SimForge is released under the [MIT License](LICENSE).
+SimForge is available under the [MIT License](LICENSE).

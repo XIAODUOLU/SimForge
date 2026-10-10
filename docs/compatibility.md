@@ -6,13 +6,15 @@ For installation, see the [README](../README.md#installation). For build command
 
 | Range | Package | Validation status |
 | --- | --- | --- |
-| Blender 4.0–4.1 | Legacy ZIP, `bl_info` minimum 4.0 | Pending tests in actual versions |
-| Blender 4.x | Extension ZIP where supported; legacy ZIP for 4.0–4.1 | Registration/interface smoke tests and Extension manifest validation pass in the available local runtime; other releases remain unverified |
-| Blender 5.x | Extension ZIP | Known USD argument changes adapted; runtime tests pending |
+| Blender 4.0–4.1 | Legacy ZIP, `bl_info` minimum 4.0 | Installation, enable/reopen/re-enable, Retopo, GPU Bake and USD Export validated in Blender 4.x |
+| Blender 4.2–4.x | Extension ZIP | Extension compatibility checked in Blender 4.x |
+| Blender 5.x | Extension ZIP | Manifest/package validation, installation, enable/reopen/re-enable, Retopo, GPU Bake and USD Export validated in Blender 5.x |
 
 The Extension manifest requires 4.2 because that installation format starts with 4.2; the business code targets 4.0 and later. Both the manifest and runtime check exclude 6.0. Passing tests in one version does not establish coverage of every 4.x/5.x release.
 
-Existing validation covers registration, input/path checks, parameter forwarding, result contracts and USD exporter argument adaptation. Real USD tests cover dynamic/static bodies, both collision approximations, physics materials, modifier evaluation, negative/nonuniform scale, parent transforms, units, texture relocation and failure cleanup. Pip installation and cached dependency reuse are tested with Blender's Python in temporary user data. Simulated RNA branches do not replace runtime tests. Retopology/baking quality and Isaac Sim simulation behavior remain outside this validation scope. The newly added metallic, roughness and alpha baking is awaiting GPU validation; no runtime checks were run for this change.
+Existing validation covers registration, input/path checks, parameter forwarding, result contracts and USD exporter argument adaptation. Real USD tests cover dynamic/static bodies, both collision approximations, physics materials, modifier evaluation, negative/nonuniform scale, parent transforms, units, texture relocation and failure cleanup. Pip installation and cached dependency reuse are tested with Blender's Python in temporary user data. The real pipeline runs in Blender 4.x and 5.x, including GPU baking of all five channels. Small constant-material fixtures produced matching channel values in both version families. This does not establish image quality for arbitrary input meshes or material graphs.
+
+Physics properties and simulation behavior of assets exported from Blender 4.x and 5.x were tested in Isaac Sim 6.x. The reusable asset intentionally has no global physics scene; the validation scene adds one.
 
 ## Adapter boundaries
 
@@ -32,10 +34,18 @@ Run each target Blender executable:
 /path/to/blender -b --factory-startup --python-exit-code 1 --python tests/blender_smoke.py
 /path/to/blender -b --factory-startup --python-exit-code 1 --python tests/blender_export.py
 /path/to/blender -b --factory-startup --python-exit-code 1 --python tests/blender_dependencies.py
+/path/to/blender -b --factory-startup --python-exit-code 1 --python tests/blender_pipeline.py
 /path/to/blender -b --factory-startup --command extension validate simforge
 ```
 
-Suggested coverage includes Blender 4.x and 5.x releases used for delivery, with separate legacy-package checks for 4.0–4.1. The Extension validation command applies only to releases supporting Extensions. Manually check installation → enable → sidebar → save/reopen → disable → re-enable. Once algorithms are implemented, add small real assets covering non-manifold inputs, multiple material slots, transparency, constant metallic values, negative scales, different units and paths containing spaces or Chinese characters.
+To reproduce Isaac Sim checks, generate four fixtures with each Blender version, then run the headless validation script from Isaac Sim's Python environment:
+
+```bash
+/path/to/blender -b --factory-startup --python-exit-code 1 --python tests/blender_isaac_fixtures.py -- /tmp/simforge-assets
+/path/to/isaacsim/python.sh tests/isaac_assets.py /tmp/simforge-assets --/renderer/enabled=false --/app/window/enabled=false --/app/livestream/enabled=false
+```
+
+Suggested coverage includes Blender 4.x and 5.x releases used for delivery, with separate legacy-package checks for 4.0–4.1. The Extension validation command applies only to releases supporting Extensions. Package installation → enable → save/reopen → disable → re-enable was checked headlessly in Blender 4.x and 5.x; visual sidebar inspection remains a manual UI check. Add real assets covering non-manifold inputs, complex material graphs, negative scales, different units and paths containing spaces or Chinese characters when validating new releases.
 
 ## Official references
 

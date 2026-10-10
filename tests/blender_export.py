@@ -120,7 +120,11 @@ with tempfile.TemporaryDirectory() as directory:
                 inherited_physics, _ = UsdShade.MaterialBindingAPI(subset.GetPrim()).ComputeBoundMaterial('physics')
                 assert visual and visual.GetPath() != physical.GetPath()
                 assert inherited_physics.GetPath() == physical.GetPath()
-            assert UsdGeom.PrimvarsAPI(mesh).GetPrimvar('st')
+            uv_names = {primvar.GetBaseName(): primvar for primvar in UsdGeom.PrimvarsAPI(mesh).GetPrimvars()
+                        if primvar.GetAttr().Get()}
+            shader_uv_names = {attr.Get() for prim in stage.Traverse() for attr in prim.GetAttributes()
+                               if attr.GetName() == 'inputs:varname'}
+            assert shader_uv_names and shader_uv_names <= uv_names.keys()
             assert not any(prim.GetTypeName() in {'DomeLight', 'Camera', 'PhysicsScene'} for prim in stage.Traverse())
             assert any(attr.GetName() == 'inputs:normal' and attr.GetConnections() for prim in stage.Traverse() for attr in prim.GetAttributes())
             resource_paths = [value.path for _, value in service._asset_attributes(stage, service.require_usd()['Sdf'])]

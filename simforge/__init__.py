@@ -3,10 +3,10 @@
 bl_info = {
     "name": "SimForge",
     "author": "SimForge Contributors",
-    "version": (0, 1, 0),
+    "version": (1, 0, 0),
     "blender": (4, 0, 0),
     "location": "View3D > Sidebar > SimForge",
-    "description": "Retopology, PBR baking and simulation-ready USD workflow scaffold",
+    "description": "Retopology, PBR baking and simulation-ready USD assets",
     "category": "Object",
 }
 

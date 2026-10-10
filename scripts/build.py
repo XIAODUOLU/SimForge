@@ -10,7 +10,7 @@ def build():
     destination = ROOT / "dist"
     destination.mkdir(exist_ok=True)
     for kind in ("legacy", "extension"):
-        archive = destination / f"simforge-0.1.0-{kind}.zip"
+        archive = destination / f"simforge-1.0.0-{kind}.zip"
         with ZipFile(archive, "w", ZIP_DEFLATED) as bundle:
             # Include the license in both installable distributions.
             license_path = "simforge/LICENSE" if kind == "legacy" else "LICENSE"

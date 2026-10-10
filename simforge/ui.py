@@ -12,7 +12,6 @@ class SIMFORGE_PT_main(bpy.types.Panel):
     def draw(self, context):
         layout = self.layout
         settings = context.scene.simforge
-        layout.label(text="Development scaffold: implement services", icon='INFO')
         layout.prop(settings, "high_poly")
         layout.prop(settings, "low_poly")
         if context.mode != 'OBJECT':

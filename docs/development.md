@@ -266,6 +266,7 @@ python3 scripts/build.py
 blender -b --factory-startup --python-exit-code 1 --python tests/blender_smoke.py
 blender -b --factory-startup --python-exit-code 1 --python tests/blender_export.py
 blender -b --factory-startup --python-exit-code 1 --python tests/blender_dependencies.py
+blender -b --factory-startup --python-exit-code 1 --python tests/blender_pipeline.py
 python3 -m compileall -q simforge scripts tests
 blender -b --factory-startup --command extension validate simforge
 ```
@@ -274,7 +275,7 @@ The Extension validation command requires Blender 4.2 or later. The build script
 
 Smoke tests cover registration, source/target checks, paths, contract forwarding, result validation, and USD argument compatibility branches. Service doubles verify interface behavior. The separate export test creates real USDs and textures; the dependency test requires network access and installs packages only into a temporary directory.
 
-The smoke test uses the default cube, which already has UVs; passing it does not prove UV generation works. The newer USD argument branch uses simulated RNA. Export tests cover physics schemas, geometry transforms, material bindings, portable textures and cleanup, but do not run Isaac Sim. The added metallic, roughness and alpha baking has not been runtime-validated. Use the [compatibility validation procedure](compatibility.md#validation-procedure) for GPU validation on the target equipment.
+The smoke test uses the default cube, which already has UVs; the pipeline test runs real UV generation, five-channel GPU baking and USD export. The newer USD argument branch also uses simulated RNA. Export tests cover physics schemas, geometry transforms, material bindings, portable textures and cleanup. Separate Isaac Sim checks cover physical behavior; use the [compatibility validation procedure](compatibility.md#validation-procedure) to reproduce them.
 
 ## Contribution conventions
 

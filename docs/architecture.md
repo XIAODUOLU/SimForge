@@ -93,7 +93,7 @@ Quality checks must verify texture resolution after relocation, correct mesh dim
 
 Dynamic assets default to convex hulls, with optional convex decomposition, and take mass in kilograms. Static assets have collision without a dynamic rigid body. Physics materials include static/dynamic friction and restitution. Author standard attributes through `UsdPhysics`; load `PhysxSchema` only when PhysX-specific features are required. Exporting Blender custom properties does not author physics schemas, and Blender rigid_body settings must not be assumed to map automatically to USD physics.
 
-Standalone assets generally should not include a global PhysicsScene; the consuming simulation scene configures it. Validate collisions, falling, contact and material loading in the target Isaac Sim version. The scaffold does not claim to generate SimReady assets yet.
+Standalone assets generally should not include a global PhysicsScene; the consuming simulation scene configures it. Validate collisions, falling, contact and material loading in the target Isaac Sim version. SimForge does not claim to generate SimReady assets yet.
 
 ## Errors and transactions
 
